@@ -117,17 +117,84 @@ xml_node_name(int node, struct pool *p)
   return n ? pool_ptr(p, n->name) : 0;
 }
 
+char *
+xml_attr_value(int attr, struct pool *p)
+{
+  struct xml_attr *a;
+  a = (struct xml_attr *)pool_ptr(p, attr);
+  return a ? pool_ptr(p, a->value) : 0;
+}
+
 int
 xml_node_find_attr(int node, char *name, struct pool *p)
 {
-  ;
+  struct xml_node *n;
+  struct xml_attr *a;
+  int attr;
+  char *s;
+
+  n = (struct xml_node *)pool_ptr(p, node);
+  if (!n)
+    return POOL_NIL;
+  attr = n->attr;
+  while (attr != POOL_NIL) {
+    a = (struct xml_attr *)pool_ptr(p, attr);
+    if (!a)
+      return POOL_NIL;
+    s = pool_ptr(p, a->name);
+    if (s && !strcmp(s, name))
+      return attr;
+    attr = a->next;
+  }
   return POOL_NIL;
 }
 
 int
 xml_node_find(int node, char *name, struct pool *p)
 {
-  ;
+  struct xml_node *n;
+  struct xml_data *d;
+  int data;
+  char *s;
+
+  n = (struct xml_node *)pool_ptr(p, node);
+  if (!n)
+    return POOL_NIL;
+  data = n->data;
+  while (data != POOL_NIL) {
+    d = (struct xml_data *)pool_ptr(p, data);
+    if (!d)
+      return POOL_NIL;
+    if (d->type == XML_NODE) {
+      s = xml_node_name(d->value, p);
+      if (s && !strcmp(name, s))
+        return d->value;
+    }
+    data = d->next;
+  }
+  return POOL_NIL;
+}
+
+char *
+xml_node_text(int node, struct pool *p)
+{
+  struct xml_node *n;
+  struct xml_data *d;
+  int data;
+  char *s;
+
+  n = (struct xml_node *)pool_ptr(p, node);
+  if (!n)
+    return POOL_NIL;
+  data = n->data;
+  while (data != POOL_NIL) {
+    d = (struct xml_data *)pool_ptr(p, data);
+    if (!d)
+      return POOL_NIL;
+    if (d->type == XML_TEXT)
+      return pool_ptr(p, d->value);
+    data = d->next;
+  }
   return POOL_NIL;
 }
 
@@ -146,9 +213,9 @@ h_from_xml_node(int h, struct pool *pool, int node, struct pool *nodepool)
 
   h = pool_append_str(pool, h, "<");
   h = pool_append_str(pool, h, pool_ptr(nodepool, n->name));
-  a = (struct xml_attr *)pool_ptr(nodepool, n->attr);
-  if (a)
-    for (; a; a = (struct xml_attr *)pool_ptr(nodepool, a->next)) {
+  for (a = (struct xml_attr *)pool_ptr(nodepool, n->attr);
+       a;
+       a = (struct xml_attr *)pool_ptr(nodepool, a->next)) {
       h = pool_append_str(pool, h, " ");
       h = pool_append_str(pool, h, pool_ptr(nodepool, a->name));
       h = pool_append_str(pool, h, "=");

@@ -76,7 +76,7 @@ test_node_cdata()
 void
 test_node()
 {
-  struct string_buf sb = {"one a=\"gamma\" b=\"delta'epsilon\">"
+  struct string_buf sb = {"one a='gamma' b=\"delta'epsilon\">"
                           "afasdf\nlalal"
                           "<!-- lalala <one> -->"
                           "&lt;three&gt; ban&#x32;i"
@@ -84,12 +84,17 @@ test_node()
                           "<![CDATA[{<one>bububu</one>}]]>"
                           "</one>"};
   struct pool p = {1024};
-  int ret, n;
+  int ret, n, x, a;
 
   set_input_callback(&sb, getbuf);
   ret = xml_read_node(0, &p, &n);
   fprintf(stderr, "ret: %d node: %d %p\n", ret, n, pool_ptr(&p, n));
   fprintf(stderr, "xml:\n%s\n", str_from_xml_node(&p, n, &p));
+  x = xml_node_find(n, "two", &p);
+  fprintf(stderr, "two text: '%s'\n", xml_node_text(x, &p));
+  fprintf(stderr, "two:\n%s\n", str_from_xml_node(&p, x, &p));
+  a = xml_node_find_attr(n, "a", &p);
+  fprintf(stderr, "one/a: '%s'\n", xml_attr_value(a, &p));
   pool_stat(&p);
 }
 
