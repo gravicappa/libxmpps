@@ -2,7 +2,7 @@
 #include "pool.h"
 #include "node.h"
 #include "input.h"
-#include "xml_parser.h"
+#include "xml.h"
 
 struct string_buf {
   char *buf;
