@@ -1,4 +1,5 @@
 enum xml_type {
+  XML_EMPTY = 0,
   XML_NODE,
   XML_TEXT
 };
@@ -23,7 +24,7 @@ struct xml_node {
 };
 
 int xml_make_node(int name, int attrs, int data, struct pool *p);
-int xml_make_attr(int name, int value, int quote, int next, struct pool *p);
+int xml_make_attr(int name, int value, int next, struct pool *p);
 int xml_add_attr(int attr, int attrlist, struct pool *p);
 int xml_add_data(int x, enum xml_type type, int list, struct pool *p);
 

@@ -3,6 +3,29 @@
 #include "node.h"
 
 static int
+xml_append_esc(struct pool *pool, int h, const char *str)
+{
+  int mark;
+
+  mark = pool_state(pool);
+  for (; *str; *str++) {
+    switch (*str) {
+    case '\'': h = pool_append_str(pool, h, "&apos;"); break;
+    case '"': h = pool_append_str(pool, h, "&quot;"); break;
+    case '&': h = pool_append_str(pool, h, "&amp;"); break;
+    case '<': h = pool_append_str(pool, h, "&gt;"); break;
+    case '>': h = pool_append_str(pool, h, "&lt;"); break;
+    default: h = pool_append_char(pool, h, *str);
+    }
+    if (h == POOL_NIL) {
+      pool_restore(pool, mark);
+      break;
+    }
+  }
+  return h;
+}
+
+static int
 reverse_attrlist(int attrlist, struct pool *pool)
 {
   struct xml_attr *a;
@@ -42,6 +65,9 @@ xml_make_node(int name, int attrs, int data, struct pool *p)
   int h;
   struct xml_node *n;
 
+  if (name == POOL_NIL)
+    return POOL_NIL;
+
   h = pool_new(p, sizeof(struct xml_node));
   if (h != POOL_NIL) {
     n = (struct xml_node *)pool_ptr(p, h);
@@ -53,19 +79,32 @@ xml_make_node(int name, int attrs, int data, struct pool *p)
 }
 
 int
-xml_make_attr(int name, int value, int quote, int next, struct pool *p)
+xml_make_attr(int name, int value, int next, struct pool *p)
 {
   int h;
   struct xml_attr *a;
 
+  if (name == POOL_NIL || value == POOL_NIL)
+    return POOL_NIL;
   h = pool_new(p, sizeof(struct xml_attr));
   if (h != POOL_NIL) {
     a = (struct xml_attr *)pool_ptr(p, h);
     a->name = name;
     a->value = value;
-    a->quote = quote;
     a->next = next;
   }
+  return h;
+}
+
+int
+xml_make_attr_s(char *name, char *value, int next, struct pool *p)
+{
+  int mark, h;
+
+  mark = pool_state(p);
+  h = xml_make_attr(pool_new_str(p, name), pool_new_str(p, name), next, p);
+  if (h == POOL_NIL)
+    pool_restore(p, mark);
   return h;
 }
 
@@ -185,17 +224,17 @@ xml_node_text(int node, struct pool *p)
 
   n = (struct xml_node *)pool_ptr(p, node);
   if (!n)
-    return POOL_NIL;
+    return 0;
   data = n->data;
   while (data != POOL_NIL) {
     d = (struct xml_data *)pool_ptr(p, data);
     if (!d)
-      return POOL_NIL;
+      return 0;
     if (d->type == XML_TEXT)
       return pool_ptr(p, d->value);
     data = d->next;
   }
-  return POOL_NIL;
+  return 0;
 }
 
 int
@@ -219,9 +258,9 @@ h_from_xml_node(int h, struct pool *pool, int node, struct pool *nodepool)
       h = pool_append_str(pool, h, " ");
       h = pool_append_str(pool, h, pool_ptr(nodepool, a->name));
       h = pool_append_str(pool, h, "=");
-      h = pool_append_char(pool, h, a->quote);
-      h = pool_append_str(pool, h, pool_ptr(nodepool, a->value));
-      h = pool_append_char(pool, h, a->quote);
+      h = pool_append_char(pool, h, '\'');
+      h = xml_append_esc(pool, h, pool_ptr(nodepool, a->value));
+      h = pool_append_char(pool, h, '\'');
     }
   d = (struct xml_data *)pool_ptr(nodepool, n->data);
   if (d) {
@@ -232,7 +271,7 @@ h_from_xml_node(int h, struct pool *pool, int node, struct pool *nodepool)
         h = h_from_xml_node(h, pool, d->value, nodepool);
         break;
       case XML_TEXT:
-        h = pool_append_str(pool, h, pool_ptr(nodepool, d->value));
+        h = xml_append_esc(pool, h, pool_ptr(nodepool, d->value));
         break;
       }
     }
