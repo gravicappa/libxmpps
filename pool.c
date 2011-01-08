@@ -96,8 +96,7 @@ pool_restore(struct pool *p, int mark)
 int
 pool_append_str(struct pool *p, int h, const char *str)
 {
-  int t, len;
-  char *b;
+  int t;
 
   if (!str)
     return POOL_NIL;
