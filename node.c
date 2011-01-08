@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "pool.h"
 #include "node.h"
 
@@ -8,7 +9,7 @@ xml_append_esc(struct pool *pool, int h, const char *str)
   int mark;
 
   mark = pool_state(pool);
-  for (; *str; *str++) {
+  for (; *str; str++) {
     switch (*str) {
     case '\'': h = pool_append_str(pool, h, "&apos;"); break;
     case '"': h = pool_append_str(pool, h, "&quot;"); break;
@@ -220,7 +221,6 @@ xml_node_text(int node, struct pool *p)
   struct xml_node *n;
   struct xml_data *d;
   int data;
-  char *s;
 
   n = (struct xml_node *)pool_ptr(p, node);
   if (!n)
@@ -265,7 +265,7 @@ h_from_xml_node(int h, struct pool *pool, int node, struct pool *nodepool)
   d = (struct xml_data *)pool_ptr(nodepool, n->data);
   if (d) {
     h = pool_append_str(pool, h, ">");
-    for (; d; d = (struct xml_data *)pool_ptr(nodepool, d->next)) {
+    for (; d; d = (struct xml_data *)pool_ptr(nodepool, d->next))
       switch (d->type) {
       case XML_NODE:
         h = h_from_xml_node(h, pool, d->value, nodepool);
@@ -274,17 +274,15 @@ h_from_xml_node(int h, struct pool *pool, int node, struct pool *nodepool)
         h = xml_append_esc(pool, h, pool_ptr(nodepool, d->value));
         break;
       }
-    }
     h = pool_append_str(pool, h, "</");
     h = pool_append_str(pool, h, pool_ptr(nodepool, n->name));
     h = pool_append_str(pool, h, ">");
   } else
     h = pool_append_str(pool, h, "/>");
 
+  if (h == POOL_NIL)
+    pool_restore(pool, mark);
   return h;
-error:
-  pool_restore(pool, mark);
-  return POOL_NIL;
 }
 
 char *
