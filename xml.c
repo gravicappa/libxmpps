@@ -1,14 +1,151 @@
-#include <ctype.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
 #include "pool.h"
 #include "node.h"
-#include "input.h"
+#include "fsm.h"
+#include "xml_states.h"
 
-struct input {
-  void *context;
-  int (*get)(void *context);
-  void (*unget)(int c, void *context);
+#define XML_ENTITY_BYTES 64
+
+struct xml {
+  struct pool mem;
+  struct pool stack;
+
+  int node;
+  int attrs;
+  int data;
+
+  int node_id;
+  int id;
+  int text;
+
+  char text_ent[XML_ENTITY_BYTES];
+  int text_ent_len;
+};
+
+int push_node(int n, int data, struct pool *p, struct pool *stack);
+int pop_node(int *n, int *data, struct pool *p, struct pool *stack);
+
+int insert_utf8_char(unsigned int x, struct xml *xml);
+
+int ischarid(int c);
+int ischarhex(int c);
+
+int id_start(int c, void *context);
+int id_body(int c, void *context);
+
+int node_start(int c, void *context);
+int node_id_end(int c, void *context);
+
+int node_attr_id_start(int c, void *context);
+int node_attr_id_body(int c, void *context);
+int node_attr_id_end(int c, void *context);
+
+int node_attr_value_start(int c, void *context);
+int node_attr_value_body(int c, void *context);
+int node_attr_value_end(int c, void *context);
+
+int node_attr_start(int c, void *context);
+int node_empty(int c, void *context);
+int node_contents(int c, void *context);
+
+int node_tail_start(int c, void *context);
+int node_tail_body(int c, void *context);
+int node_tail_end(int c, void *context);
+
+int entity_start(int c, void *context);
+int entity_body(int c, void *context);
+int entity_end(int c, void *context);
+
+int hex_number_start(int c, void *context);
+int hex_number_body(int c, void *context);
+int hex_number_end(int c, void *context);
+
+int dec_number_start(int c, void *context);
+int dec_number_body(int c, void *context);
+int dec_number_end(int c, void *context);
+
+int text_start(int c, void *context);
+int text_body(int c, void *context);
+int node_text_end(int c, void *context);
+
+#define RULE_WHITESPACE(s, next) \
+  {s, isspace, 0, s}, \
+  {s, fsm_true, 0, next, fsm_reject}
+  
+#define RULE_ID(s, next, end) \
+  RULE_WHITESPACE(s, s ## _X1), \
+  {s ## _X1, isalpha, 0, s ## _X2, id_start}, \
+  {s ## _X1, fsm_true, 0, -1}, \
+  {s ## _X2, ischarid, 0, s ## _X2, id_body}, \
+  {s ## _X2, fsm_true, 0, next, end}
+
+#define RULE_TEXT(s, next) \
+  {s, fsm_char, '&', s ## _X1}, \
+  {s, fsm_true, 0, s, text_body}, \
+  {s ## _X1, fsm_char, '#', s ## _X2}, \
+  {s ## _X1, isalpha, 0, s ## _X5, entity_start}, \
+  {s ## _X2, fsm_char, 'x', s ## _X3, hex_number_start}, \
+  {s ## _X2, isdigit, 0, s ## _X4, dec_number_start}, \
+  {s ## _X3, ischarhex, 0, s ## _X3, entity_body}, \
+  {s ## _X3, fsm_char, ';', s, hex_number_end}, \
+  {s ## _X4, isdigit, 0, s ## _X4, entity_body}, \
+  {s ## _X4, fsm_char, ';', s, dec_number_end}, \
+  {s ## _X5, isalpha, 0, s ## _X5, entity_body}, \
+  {s ## _X5, fsm_char, ';', s, entity_end}
+
+#define RULE_ATTR_VALUE(s, next, quote, start, end) \
+  {s, fsm_true, 0, s ## _X1, start}, \
+  {s ## _X1, fsm_char, quote, next, end}, \
+  RULE_TEXT(s ## _X1, next)
+
+#define RULE_NODE_ATTR(s, next) \
+  RULE_WHITESPACE(s, s ## _X1), \
+  {s ## _X1, fsm_char, '/', next, fsm_reject}, \
+  {s ## _X1, fsm_char, '>', next, fsm_reject}, \
+  RULE_ID(s ## _X1, s ## _X4, node_attr_id_end),\
+  RULE_WHITESPACE(s ## _X4, s ## _X5), \
+  {s ## _X5, fsm_char, '=', s ## _X6}, \
+  RULE_WHITESPACE(s ## _X6, s ## _X7), \
+  {s ## _X7, fsm_char, '\'', s ## _X8}, \
+  {s ## _X7, fsm_char, '"', s ## _X9}, \
+  RULE_ATTR_VALUE(s ## _X8, s, '\'', text_start, node_attr_value_end), \
+  RULE_ATTR_VALUE(s ## _X9, s, '"', text_start, node_attr_value_end)
+
+struct fsm_rule xml_rules[] = {
+  RULE_WHITESPACE(XML_STATE_0, XML_STATE_1),
+  {XML_STATE_1, fsm_char, '<', XML_STATE_TAG},
+  /*{XML_STATE_TAG, fsm_char, '?', XML_STATE_HEAD}, */
+  /*{XML_STATE_TAG, fsm_char, '!', XML_STATE_COMMENT}, */
+  {XML_STATE_TAG, isspace, 0, XML_STATE_TAG_1},
+  {XML_STATE_TAG, isalnum, 0, XML_STATE_NODE, fsm_reject},
+  {XML_STATE_TAG_1, isspace, 0, XML_STATE_TAG_1},
+  {XML_STATE_TAG_1, isalnum, 0, XML_STATE_NODE, fsm_reject},
+
+  /* xml node */
+  RULE_WHITESPACE(XML_STATE_NODE, XML_STATE_NODE_1),
+  RULE_ID(XML_STATE_NODE_1, XML_STATE_NODE_ATTR, node_id_end),
+  RULE_NODE_ATTR(XML_STATE_NODE_ATTR, XML_STATE_NODE_ATTR_END),
+  {XML_STATE_NODE_ATTR_END, fsm_char, '/', XML_STATE_NODE_ATTR_END_1},
+  {XML_STATE_NODE_ATTR_END, fsm_char, '>', XML_STATE_CONTENTS, node_contents},
+  {XML_STATE_NODE_ATTR_END_1, fsm_char, '>', XML_STATE_CONTENTS, node_empty},
+
+  /* node contents */
+  {XML_STATE_CONTENTS, fsm_char, '<', XML_STATE_CONTENTS_1, node_text_end},
+  RULE_TEXT(XML_STATE_CONTENTS, XML_STATE_CONTENTS),
+  /*{XML_STATE_CONTENTS_1, fsm_char, '!', XML_STATE_CONTENTS_2},*/
+  {XML_STATE_CONTENTS_1, fsm_char, '/', XML_STATE_CONTENTS_3},
+  {XML_STATE_CONTENTS_1, fsm_true, 0, XML_STATE_NODE, node_start},
+  /*{XML_STATE_CONTENTS_2, fsm_char, '-', XML_STATE_COMMENT},*/
+  /*{XML_STATE_CONTENTS_2, fsm_char, '[', XML_STATE_SPECIAL},*/
+
+  /* node end */
+  RULE_ID(XML_STATE_CONTENTS_3, XML_STATE_CONTENTS_4, node_tail_end),
+  RULE_WHITESPACE(XML_STATE_CONTENTS_4, XML_STATE_CONTENTS_5),
+  {XML_STATE_CONTENTS_5, fsm_char, '>', XML_STATE_CONTENTS},
+
+  {0}
 };
 
 struct xml_symbol {
@@ -22,427 +159,450 @@ struct xml_symbol {
   {"quot", '"'},
   {0}
 };
-
-int xml_read_node(struct input *in, struct pool *p, int *ret);
-
+
 int
-in_getc(struct input *in)
+init_xml_context(struct xml *xml)
 {
-  /*int c =  in->get(in->context);*/
-  int c = input_getc();
-  /*fprintf(stderr, "c: %c\n", c);*/
-  return c;
+  xml->node = xml->attrs = xml->data = xml->id = xml->node_id = POOL_NIL;
+  xml->text = POOL_NIL;
+  xml->text_ent_len = 0;
+  return 0;
 }
 
 void
-in_ungetc(int c, struct input *in)
+test_xml()
 {
-  /*in->unget(c, in->context);*/
-  input_ungetc(c);
+  struct fsm *fsm;
+  struct xml xml = {{4096}, {4096}};
+  int s, c;
+
+  init_xml_context(&xml);
+
+  fsm = make_fsm(xml_rules);
+  if (!fsm) {
+    fprintf(stderr, "fsm generation error\n");
+    exit(1);
+  }
+
+  s = 0;
+  while ((c = getc(stdin)) != EOF) {
+    fprintf(stderr, "s: %d c: '%c' ", s, c);
+    s = fsm_run(fsm, c, s, &xml);
+    fprintf(stderr, "=> %d\n", s);
+    if (s < 0)
+      break;
+  }
+  free(fsm);
 }
 
 int
-skip_ws(struct input *in)
+main()
 {
-  int c;
-
-  do {
-    c = in_getc(in);
-    if (c == EOF)
-      return -1;
-  } while (isspace(c));
-
-  in_ungetc(c, in);
+  fprintf(stderr, "xml parser has %d rules\n",
+          sizeof(xml_rules) / sizeof(xml_rules[0]));
+  test_xml();
   return 0;
 }
 
 int
-xml_skip_comment(struct input *in)
+ischarid(int c)
 {
-  int c;
+  return isalnum(c) || c == ':' || c == '.' || c == '_' || c == '-';
+}
 
-  char end[4] = "-->", *pend = end;
-  c = in_getc(in);
-  if (c != '-' || c == EOF)
+int
+ischarhex(int c)
+{
+  return isdigit(c) || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
+}
+
+int
+push_node(int n, int data, struct pool *p, struct pool *stack)
+{
+  struct xml_node *node;
+  int h, *ptr;
+
+  fprintf(stderr, "push_node %d %d (used: %d)\n", n, data, p->used);
+
+  node = (struct xml_node *)pool_ptr(p, n);
+  fprintf(stderr, "push_node node: %p\n", node);
+  if (!node)
     return -1;
-  while (1) {
-    c = in_getc(in);
-    if (c == EOF)
-      return -1;
-    if (c == *pend) {
-      pend++;
-      if (!*pend)
-        break;
-    } else
-      pend = end;
-  }
+  node->data = data;
+  h = pool_new(stack, sizeof(n));
+  ptr = (int *)pool_ptr(stack, h);
+  fprintf(stderr, "push_node h: %d pts: %p\n", h, ptr);
+  if (!ptr)
+    return -1;
+  *ptr = n;
+  fprintf(stderr, "push_node returns\n");
   return 0;
 }
 
 int
-xml_read_symbol(struct input *in, struct pool *p, int data, int *ret)
+pop_node(int *n, int *data, struct pool *p, struct pool *stack)
 {
-  char buf[8], *fmt;
-  int c, i, len = 0;
+  struct xml_node *node;
+  int s, *pn;
 
-  do {
-    c = in_getc(in);
-    if (c == EOF)
-      return -1;
-    buf[len++] = c;
-  } while (len < sizeof(buf) - 1 && c != ';');
-  buf[len - 1] = 0;
-  if (buf[0] == '#') {
-    if (buf[1] == 'x') {
-      if (sscanf(buf + 2, "%x", &i) != 1)
-        return 1;
-    } else if (sscanf(buf + 1, "%u", &i) != 1)
-      return 1;
-    data = pool_append_char(p, data, i);
-  } else {
-    for (i = 0; xml_symbols[i].id; i++)
-      if (!strcmp(xml_symbols[i].id, buf)) {
-        data = pool_append_char(p, data, xml_symbols[i].c);
-        break;
-      }
-    if (!xml_symbols[i].id)
-      return -1;
-  }
-  *ret = data;
+  s = stack->used;
+  if (s < sizeof(int))
+    return 0;
+
+  pn = (int *)pool_ptr(stack, s - sizeof(int));
+  if (!pn)
+    return POOL_NIL;
+  *n = *pn;
+  pool_restore(stack, s - sizeof(int));
+
+  node = (struct xml_node *)pool_ptr(p, *n);
+  if (!node)
+    return -1;
+  *data = node->data;
   return 0;
+}
+
+int
+id_start(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+  xml->id = pool_append_char(&xml->mem, POOL_NIL, c);
+  if (xml->id == POOL_NIL)
+    return -1;
+  return 0;
+}
+
+int
+id_body(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+  xml->id = pool_append_char(&xml->mem, xml->id, c);
+  if (xml->id == POOL_NIL)
+    return -1;
+  return 0;
+}
+
+int
+node_id_end(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+  xml->node_id = xml->id;
+  xml->id = POOL_NIL;
+  fprintf(stderr, "node_id_end id: '%s'\n",
+          pool_ptr(&xml->mem, xml->node_id));
+  xml->attrs = POOL_NIL;
+  return 1;
+}
+
+int
+node_attr_id_start(int c, void *context)
+{
+  return 0;
+}
+
+int
+node_attr_id_body(int c, void *context)
+{
+  return 0;
+}
+
+int
+node_attr_id_end(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+  fprintf(stderr, "node_attr_id_end '%s'\n", pool_ptr(&xml->mem, xml->id));
+  return 1;
+}
+
+int
+node_attr_value_start(int c, void *context)
+{
+  return 0;
+}
+
+int
+node_attr_value_body(int c, void *context)
+{
+  return 0;
+}
+
+int
+node_attr_value_end(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+
+  fprintf(stderr, "attr '%s' = '%s' prev: %d\n", pool_ptr(&xml->mem, xml->id),
+          pool_ptr(&xml->mem, xml->text), xml->attrs);
+  xml->attrs = xml_make_attr(xml->id, xml->text, xml->attrs, &xml->mem);
+  xml->id = xml->text = POOL_NIL;
+  if (xml->attrs == POOL_NIL)
+    return -1;
+  return 0;
+}
+
+int
+node_attr_start(int c, void *context)
+{
+  return 0;
+}
+
+int
+node_start(int c, void *context)
+{
+  fprintf(stderr, "node_start\n");
+  return 1;
 }
 
 void
-show_pool_str(int s, struct pool *p)
+dbg_show_node(int n, struct pool *p)
 {
+  struct pool mem = { 4096 };
+  struct xml_node *node;
+  int d = -1;
+
+  node = (struct xml_node *)pool_ptr(p, n);
+  if (node)
+    d = node->data;
+
+  fprintf(stderr, "NODE (d: %d): '%s'\n", d, str_from_xml_node(&mem, n, p));
 }
 
 int
-xml_read_cdata(struct input *in, struct pool *p, int data, int *ret)
+add_node(struct xml *xml)
 {
-  int c, mark, t;
-  char end[4] = "]]>", *pend = end, *pc;
+  int n;
 
-  mark = pool_state(p);
+  fprintf(stderr, "add_node '%s'\n", pool_ptr(&xml->mem, xml->node_id));
+  n = xml_make_node(xml->node_id, xml->attrs, POOL_NIL, &xml->mem);
+  if (n == POOL_NIL)
+    return POOL_NIL;
+  xml->attrs = POOL_NIL;
+  fprintf(stderr, "add_node_item to %d ", xml->data);
+  xml->data = xml_add_data(n, XML_NODE, xml->data, &xml->mem);
+  fprintf(stderr, "=> %d\n", xml->data);
+  if (xml->data == POOL_NIL)
+    return POOL_NIL;
+  dbg_show_node(n, &xml->mem);
+  return n;
+}
 
-  c = in_getc(in);
-  if (c != '[')
-    goto error;
-  while(1) {
-    c = in_getc(in);
-    if (c == EOF)
-      goto error;
-    if (c == *pend) {
-      pend++;
-      if (!*pend)
-        break;
-    } else {
-      for (pc = end; pc != pend; pc++)
-        data = pool_append_char(p, data, *pc);
-      pend = end;
-      data = pool_append_char(p, data, c);
-    }
-  }
-  *ret = data;
+int
+node_empty(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+
+  if (add_node(xml) == POOL_NIL)
+    return -1;
+  fprintf(stderr, "node_empty '%s'\n", pool_ptr(&xml->mem, xml->node_id));
   return 0;
-error:
-  pool_restore(p, mark);
-  return -1;
 }
 
 int
-xml_read_id(struct input *in, struct pool *p, int *ret)
+node_contents(int c, void *context)
 {
-  int c, mark, id;
+  struct xml *xml = (struct xml *)context;
+  int n;
 
-  mark = pool_state(p);
-  if (skip_ws(in))
-    goto error;
-  
-  c = in_getc(in);
-  if (!isalpha(c))
-    goto error;
-  id = pool_append_char(p, POOL_NIL, c);
-  while (1) {
-    c = in_getc(in);
-    if (isalnum(c) || c == '_' || c == '-' || c == ':' || c == '.')
-      pool_append_char(p, id, c);
-    else
+  fprintf(stderr, "node '%s' contents\n", pool_ptr(&xml->mem, xml->node_id));
+
+  n = add_node(xml);
+  if (n == POOL_NIL)
+    return -1;
+
+  if (xml->node != POOL_NIL
+      && push_node(xml->node, xml->data, &xml->mem, &xml->stack))
+    return -1;
+  xml->node = n;
+  xml->data = POOL_NIL;
+
+  return 0;
+}
+
+int
+node_tail_start(int c, void *context)
+{
+  return 0;
+}
+
+int
+node_tail_body(int c, void *context)
+{
+  return 0;
+}
+
+int
+node_tail_end(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+
+  fprintf(stderr, "node %d:'%s' end\n", xml->node,
+          pool_ptr(&xml->mem, xml->id));
+  if (xml_set_node_data(xml->node, xml->data, &xml->mem))
+    return -1;
+  dbg_show_node(xml->node, &xml->mem);
+  if (pop_node(&xml->node, &xml->data, &xml->mem, &xml->stack)
+      || xml->node == POOL_NIL)
+    return -1;
+  return 1;
+}
+
+int
+entity_start(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+  xml->text_ent_len = 1;
+  xml->text_ent[0] = c;
+  xml->text_ent[1] = 0;
+  return 0;
+}
+
+int
+entity_body(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+  if (xml->text_ent_len >= sizeof(xml->text_ent) - 1)
+    return -1;
+  xml->text_ent[xml->text_ent_len++] = c;
+  xml->text_ent[xml->text_ent_len] = 0;
+  return 0;
+}
+
+int
+entity_end(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+  int i;
+
+  fprintf(stderr, "entity: '%s'\n", xml->text_ent);
+  for (i = 0; xml_symbols[i].id; i++)
+    if (!strcmp(xml_symbols[i].id, xml->text_ent))
       break;
+  if (!xml_symbols[i].id)
+    return -1;
+  xml->text = pool_append_char(&xml->mem, xml->text, xml_symbols[i].c);
+  if (xml->text == POOL_NIL)
+    return -1;
+  xml->text_ent[0] = 0;
+  xml->text_ent_len = 0;
+
+  return 0;
+}
+
+int
+hex_number_start(int c, void *context)
+{
+  fprintf(stderr, "hex start: '%c'\n", c);
+  return 0;
+}
+
+int
+insert_utf8_char(unsigned int x, struct xml *xml)
+{
+  int off, i;
+  unsigned char buf[7] = {0};
+
+  if (x <= 0x7f) {
+    buf[0] = x;
+    off = 0;
+  } else if (x < 0x7ff) {
+    buf[0] = 0xc0 | x >> 6;
+    off = 6;
+  } else if (x < 0xffff) {
+    buf[0] = 0xe0 | x >> 12;
+    off = 12;
+  } else if (x < 0x1fffff) {
+    buf[0] = 0xf0 | x >> 18;
+    off = 18;
+  } else if (x < 0x3ffffff) {
+    buf[0] = 0xf8 | x >> 24;
+    off = 24;
+  } else if (x < 0x7fffffff) {
+    buf[0] = 0xfc || x >> 30;
+    off = 30;
   }
-  in_ungetc(c, in);
-  *ret = id;
-  return 0;
-
-error:
-  pool_restore(p, mark);
-  return -1;
+  i = 1;
+  for (; off > 0; off -= 6)
+    buf[i++] = ((x >> (off - 6)) & 0x3f) | 0x80;
+  xml->text = pool_append_str(&xml->mem, xml->text, buf);
+  return (xml->text != POOL_NIL) ? 0 : -1;
 }
 
 int
-xml_read_attr_val(struct input *in, struct pool *p, int *quote, int *ret)
+hex_number_end(int c, void *context)
 {
-  int c, mark, q, val;
+  struct xml *xml = (struct xml *)context;
+  unsigned int res;
 
-  mark = pool_state(p);
-  if (skip_ws(in))
-    goto error;
-
-  q = in_getc(in);
-  if (q != '\'' && q != '"')
-    goto error;
-
-  val = -1;
-  c = in_getc(in);
-  if (c == q) {
-    *ret = -1;
-    return 0;
-  }
-
-  val = pool_append_char(p, POOL_NIL, c);
-  if (val < 0)
-    goto error;
-  while (1) {
-    c = in_getc(in);
-    if (c == EOF)
-      goto error;
-    if (c == q)
-      break;
-    if (pool_append_char(p, val, c) < 0)
-      goto error;
-  }
-  *quote = q;
-  *ret = val;
+  res = strtoul(xml->text_ent, 0, 16);
+  fprintf(stderr, "hex end: '%c' value: '%s' d: %x\n", c, xml->text_ent, res);
+  xml->text_ent[0] = 0;
+  xml->text_ent_len = 0;
+  if (insert_utf8_char(res, xml))
+    return -1;
   return 0;
-
-error:
-  pool_restore(p, mark);
-  return -1;
 }
 
 int
-xml_read_attr(struct input *in, struct pool *p, int attrlist, int *ret)
+dec_number_start(int c, void *context)
 {
-  int c, mark, id, val, a, q;
-  struct xml_attr *attr;
-
-  mark = pool_state(p);
-
-  if (xml_read_id(in, p, &id))
-    goto error;
-
-  if (skip_ws(in))
-    goto error;
-
-  c = in_getc(in);
-
-  if (c != '=') 
-    goto error;
-
-  if (xml_read_attr_val(in, p, &q, &val))
-    goto error;
-
-  *ret = xml_make_attr(id, val, q, attrlist, p);
-  if (*ret == POOL_NIL)
-    goto error;
+  struct xml *xml = (struct xml *)context;
+  fprintf(stderr, "dec start: '%c'\n", c);
+  xml->text_ent_len = 1;
+  xml->text_ent[0] = c;
+  xml->text_ent[1] = 0;
   return 0;
-
-error:
-  pool_restore(p, mark);
-  return -1;
 }
 
 int
-xml_read_attrs(struct input *in, struct pool *p, int *ret)
+dec_number_end(int c, void *context)
 {
-  int c, mark, attrs = -1;
+  struct xml *xml = (struct xml *)context;
+  unsigned int res;
 
-  mark = pool_state(p);
-
-  while (1) {
-    if (skip_ws(in))
-      goto error;
-    c = in_getc(in);
-    in_ungetc(c, in);
-    if (!isalpha(c)) {
-      *ret = attrs;
-      return 0;
-    }
-    if (xml_read_attr(in, p, attrs, &attrs))
-      goto error;
-  }
-error:
-  pool_restore(p, mark);
-  return -1;
+  res = atoi(xml->text_ent);
+  fprintf(stderr, "dec end: '%c' value: '%s'\n", c, xml->text_ent);
+  xml->text_ent[0] = 0;
+  xml->text_ent_len = 0;
+  if (insert_utf8_char(res, xml))
+    return -1;
+  return 0;
 }
 
 int
-xml_read_node_head(struct input *in, struct pool *p, int *ret)
+text_start(int c, void *context)
 {
-  int mark, id, attrs = -1;
+  struct xml *xml = (struct xml *)context;
+  xml->text = pool_append_char(&xml->mem, POOL_NIL, c);
+  if (xml->text == POOL_NIL)
+    return -1;
 
-  *ret = -1;
-  mark = pool_state(p);
-
-  if (xml_read_id(in, p, &id))
-    goto error;
-  if (xml_read_attrs(in, p, &attrs))
-    goto error;
-  *ret = xml_make_node(id, attrs, -1, p);
+  fprintf(stderr, "text_start text: '%s'\n", pool_ptr(&xml->mem, xml->text));
   return 0;
-
-error:
-  pool_restore(p, mark);
-  return -1;
 }
 
 int
-xml_read_node_end(struct input *in, struct pool *p, int node)
+text_body(int c, void *context)
 {
-  int c, mark, id;
-  char *name, *end;
+  struct xml *xml = (struct xml *)context;
+  xml->text = pool_append_char(&xml->mem, xml->text, c);
+  if (xml->text == POOL_NIL)
+    return -1;
 
-  mark = pool_state(p);
-
-  if (xml_read_id(in, p, &id))
-    goto error;
-  if (skip_ws(in))
-    goto error;
-  c = in_getc(in);
-  if (c != '>')
-    goto error;
-
-  name = xml_node_name(node, p);
-  end = pool_ptr(p, id);
-  if (!name || !end || strcmp(name, end) != 0)
-    goto error;
-
-  pool_restore(p, mark);
+  fprintf(stderr, "text_body text: '%s'\n", pool_ptr(&xml->mem, xml->text));
   return 0;
-
-error:
-  pool_restore(p, mark);
-  return -1;
 }
 
 int
-xml_read_tagged(struct input *in, struct pool *p, int *data, int *datalist)
+node_text_end(int c, void *context)
 {
-  int c, mark, tmp, n;
+  struct xml *xml = (struct xml *)context;
 
-  mark = pool_state(p);
-
-  c = in_getc(in);
-  if (c == '!') {
-    c = in_getc(in);
-    switch (c) {
-    case '-':
-      if (xml_skip_comment(in))
-        goto error;
-      break;
-    case '[':
-      tmp = pool_state(p);
-      if (xml_read_id(in, p, &n) || !pool_ptr(p, n))
-        goto error;
-      if (!strcmp(pool_ptr(p, n), "CDATA")) {
-        pool_restore(p, tmp);
-        if (xml_read_cdata(in, p, *data, data))
-          goto error;
-      } else
-        goto error;
-      break;
-    default:
-      goto error;
-    }
-  } else {
-    in_ungetc(c, in);
-    if (xml_read_node(in, p, &n))
-      goto error;
-    *datalist = xml_add_data(n, XML_NODE, *datalist, p);
-    if (*datalist < 0)
-      goto error;
-  }
+  fprintf(stderr, "node_text_end text: '%s' to %d ",
+          pool_ptr(&xml->mem, xml->text), xml->data);
+  xml->data = xml_add_data(xml->text, XML_TEXT, xml->data, &xml->mem);
+  fprintf(stderr, "=> %d\n", xml->data);
+  if (xml->data == POOL_NIL)
+    return -1;
+  xml->text = POOL_NIL;
   return 0;
-
-error:
-  pool_restore(p, mark);
-  return -1;
-}
-
-int
-xml_read_node_data(struct input *in, struct pool *p, int node, int datalist, 
-                   int *ret)
-{
-  int c, mark, t, data = -1;
-
-  mark = pool_state(p);
-  while (1) {
-    c = in_getc(in);
-    if (c == EOF)
-      goto error;
-    if (c == '<') {
-      if (data >= 0) {
-        datalist = xml_add_data(data, XML_TEXT, datalist, p);
-        if (datalist < 0)
-          goto error;
-        data = -1;
-      }
-      c = in_getc(in);
-      if (c == '/') {
-        if (xml_read_node_end(in, p, node))
-          goto error;
-        break;
-      } else {
-        in_ungetc(c, in);
-        if (xml_read_tagged(in, p, &data, &datalist))
-          goto error;
-      }
-    } else if (c == '&') {
-      if (xml_read_symbol(in, p, data, &data))
-        goto error;
-    } else
-      data = pool_append_char(p, data, c);
-  }
-  *ret = datalist;
-  return 0;
-
-error:
-  pool_restore(p, mark);
-  return -1;
-}
-
-int
-xml_read_node(struct input *in, struct pool *p, int *ret)
-{
-  int c, mark, n, data = -1;
-  mark = pool_state(p);
-
-  if (xml_read_node_head(in, p, &n))
-    goto error;
-
-  if (skip_ws(in))
-    goto error;
-
-  c = in_getc(in);
-  switch (c) {
-  case '>':
-    if (xml_read_node_data(in, p, n, -1, &data))
-      goto error;
-    if (xml_set_node_data(n, data, p))
-      goto error;
-    break;
-  case '/':
-    c = in_getc(in);
-    if (c != '>')
-      goto error;
-    break;
-  default:
-    goto error;
-  }
-  *ret = n;
-  return 0;
-
-error:
-  pool_restore(p, mark);
-  return -1;
 }
