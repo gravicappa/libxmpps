@@ -94,7 +94,7 @@ pool_restore(struct pool *p, int mark)
 }
 
 int
-pool_append_str(struct pool *p, int h, const char *str)
+pool_append_strn(struct pool *p, int h, const char *str, int len)
 {
   int t;
 
@@ -103,8 +103,15 @@ pool_append_str(struct pool *p, int h, const char *str)
 
   if (h != POOL_NIL && p->used > 0)
     p->used--;
-  t = pool_new_str(p, str);
+  t = pool_new_strn(p, str, len);
   return (h == POOL_NIL) ? t : h;
+}
+
+
+int
+pool_append_str(struct pool *p, int h, const char *str)
+{
+  return pool_append_strn(p, h, str, strlen(str));
 }
 
 int

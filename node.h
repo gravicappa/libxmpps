@@ -40,3 +40,6 @@ int xml_node_find(int node, char *name, struct pool *p);
 int reverse_datalist(int datalist, struct pool *p);
 int xml_set_node_data(int node, int datalist, struct pool *p);
 char *str_from_xml_node(struct pool *pool, int node, struct pool *nodepool);
+
+int xml_append_esc(struct pool *pool, int h, const char *str);
+int xml_printf(struct pool *pool, int h, const char *fmt, ...);

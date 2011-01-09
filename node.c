@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "pool.h"
 #include "node.h"
 
-static int
+int
 xml_append_esc(struct pool *pool, int h, const char *str)
 {
   int mark;
@@ -23,6 +24,52 @@ xml_append_esc(struct pool *pool, int h, const char *str)
       break;
     }
   }
+  return h;
+}
+
+int
+xml_printf(struct pool *pool, int h, const char *fmt, ...)
+{
+  va_list args;
+  int mark, n;
+  char buf[32];
+  char *prev, *s;
+
+  va_start(args, fmt);
+  mark = pool_state(pool);
+  n = strlen(fmt);
+  prev = fmt;
+  while ((s = strchr(prev, '%'))) {
+    h = pool_append_strn(pool, h, prev, s - prev);
+    s++;
+    switch (*s) {
+    case 's':
+      h = xml_append_esc(pool, h, va_arg(args, const char *));
+      break;
+    case 'S':
+      h = pool_append_str(pool, h, va_arg(args, const char *));
+      break;
+    case 'd':
+      snprintf(buf, sizeof(buf), "%d", va_arg(args, int));
+      h = pool_append_str(pool, h, buf);
+      break;
+    case 'u':
+      snprintf(buf, sizeof(buf), "%u", va_arg(args, unsigned int));
+      h = pool_append_str(pool, h, buf);
+      break;
+    case '%':
+      break;
+    default:
+      h = POOL_NIL;
+    }
+    prev = s + 1;
+    if (h == POOL_NIL)
+      break;
+  }
+  h = pool_append_str(pool, h, prev);
+  if (h == POOL_NIL)
+    pool_restore(pool, mark);
+  va_end(args);
   return h;
 }
 
