@@ -20,7 +20,7 @@ fsm_run_rules(struct fsm_rule *rules, int in, int state, void *context)
   return FSM_ERROR;
 }
 
-void
+static void
 fsm_print_rule(FILE *out, struct fsm_rule *r)
 {
   fprintf(out, "rule %d", r->state);
@@ -51,17 +51,20 @@ fsm_run(struct fsm *fsm, int in, int state, void *context)
     n = fsm->states[state].nrules;
     state = -1;
     for (i = 0; i < n; i++, pr++) {
+#if 0
       fprintf(stderr, ";; checking in: '%c' ", in);
       fsm_print_rule(stderr, pr);
+#endif
       if ((pr->pred == fsm_char && pr->in == in) || pr->pred(in)) {
+#if 0
         fprintf(stderr, ";; matched in: '%c' ", in);
         fsm_print_rule(stderr, pr);
+#endif
         state = pr->next;
         r = pr->fn ? pr->fn(in, context) : 0;
-        if (r > 0) {
-          fprintf(stderr, ";; breaking\n");
+        if (r > 0)
           break;
-        } else if (r < 0)
+        else if (r < 0)
           return FSM_ERROR;
         return pr->next;
       }
