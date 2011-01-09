@@ -2,9 +2,11 @@ TARG = test_fsm
 CC = pcc
 CFLAGS = -O0 -g -Wall -pedantic
 
+< config.mk
+
 test:V: test_xml
 	ulimit -c 65536
-	./test_xml < test.xml
+	./test_xml < test/xmpp1.xml
 	ulimit -c 0
 
 test_xml: test_xml.o xml.o fsm.o pool.o node.o
