@@ -189,51 +189,46 @@ xml_node_find_attr(int node, char *name, struct pool *p)
   return POOL_NIL;
 }
 
-int
-xml_node_find(int node, char *name, struct pool *p)
+struct xml_data *
+xml_node_data(int node, struct pool *p)
 {
   struct xml_node *n;
-  struct xml_data *d;
-  int data;
-  char *s;
-
   n = (struct xml_node *)pool_ptr(p, node);
   if (!n)
     return POOL_NIL;
-  data = n->data;
-  while (data != POOL_NIL) {
-    d = (struct xml_data *)pool_ptr(p, data);
-    if (!d)
-      return POOL_NIL;
+  return (struct xml_data *)pool_ptr(p, n->data);
+}
+
+struct xml_data *
+xml_data_next(struct xml_data *d, struct pool *p)
+{
+  return d ? (struct xml_data *)pool_ptr(p, d->next) : POOL_NIL;
+}
+
+int
+xml_node_find(int node, char *name, struct pool *p)
+{
+  struct xml_data *d;
+  char *s;
+
+  for (d = xml_node_data(node, p); d; d = xml_data_next(d, p))
     if (d->type == XML_NODE) {
       s = xml_node_name(d->value, p);
       if (s && !strcmp(name, s))
         return d->value;
     }
-    data = d->next;
-  }
   return POOL_NIL;
 }
 
 char *
 xml_node_text(int node, struct pool *p)
 {
-  struct xml_node *n;
   struct xml_data *d;
   int data;
 
-  n = (struct xml_node *)pool_ptr(p, node);
-  if (!n)
-    return 0;
-  data = n->data;
-  while (data != POOL_NIL) {
-    d = (struct xml_data *)pool_ptr(p, data);
-    if (!d)
-      return 0;
+  for (d = xml_node_data(node, p); d; d = xml_data_next(d, p))
     if (d->type == XML_TEXT)
       return pool_ptr(p, d->value);
-    data = d->next;
-  }
   return 0;
 }
 
