@@ -2,12 +2,12 @@ TARG = test_fsm
 CC = pcc
 CFLAGS = -O0 -g -Wall -pedantic
 
-test:V: xml
+test:V: test_xml
 	ulimit -c 65536
-	./xml < test.xml
+	./test_xml < test.xml
 	ulimit -c 0
 
-xml: xml.o fsm.o pool.o node.o
+test_xml: test_xml.o xml.o fsm.o pool.o node.o
 
 xml.o: xml.c xml_states.h
 

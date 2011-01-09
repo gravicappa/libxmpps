@@ -1,3 +1,3 @@
 *.o
 core
-test_xml_parser
+test_xml
