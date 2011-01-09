@@ -7,7 +7,6 @@
 #include "xml.h"
 #include "xml_states.h"
 
-
 static int push_node(int n, int data, struct pool *p, struct pool *stack);
 static int pop_node(int *n, int *data, struct pool *p, struct pool *stack);
 
@@ -22,20 +21,13 @@ static int id_body(int c, void *context);
 static int node_start(int c, void *context);
 static int node_id_end(int c, void *context);
 
-static int node_attr_id_start(int c, void *context);
-static int node_attr_id_body(int c, void *context);
 static int node_attr_id_end(int c, void *context);
 
-static int node_attr_value_start(int c, void *context);
-static int node_attr_value_body(int c, void *context);
 static int node_attr_value_end(int c, void *context);
 
-static int node_attr_start(int c, void *context);
 static int node_empty(int c, void *context);
 static int node_contents(int c, void *context);
 
-static int node_tail_start(int c, void *context);
-static int node_tail_body(int c, void *context);
 static int node_tail_end(int c, void *context);
 
 static int contents_start(int c, void *context);
@@ -44,7 +36,6 @@ static int entity_start(int c, void *context);
 static int entity_body(int c, void *context);
 static int entity_end(int c, void *context);
 
-static int hex_number_start(int c, void *context);
 static int hex_number_body(int c, void *context);
 static int hex_number_end(int c, void *context);
 
@@ -55,11 +46,11 @@ static int dec_number_end(int c, void *context);
 static int text_start(int c, void *context);
 static int text_body(int c, void *context);
 static int node_text_end(int c, void *context);
-
+
 #define RULE_WHITESPACE(s, next) \
   {s, isspace, 0, s}, \
   {s, fsm_true, 0, next, fsm_reject}
-  
+
 #define RULE_ID(s, next, end) \
   RULE_WHITESPACE(s, s ## _X1), \
   {s ## _X1, isalpha, 0, s ## _X2, id_start}, \
@@ -72,7 +63,7 @@ static int node_text_end(int c, void *context);
   {s, fsm_true, 0, s, text_body}, \
   {s ## _X1, fsm_char, '#', s ## _X2}, \
   {s ## _X1, isalpha, 0, s ## _X5, entity_start}, \
-  {s ## _X2, fsm_char, 'x', s ## _X3, hex_number_start}, \
+  {s ## _X2, fsm_char, 'x', s ## _X3}, \
   {s ## _X2, isdigit, 0, s ## _X4, dec_number_start}, \
   {s ## _X3, ischarhex, 0, s ## _X3, entity_body}, \
   {s ## _X3, fsm_char, ';', s, hex_number_end}, \
@@ -102,25 +93,35 @@ static int node_text_end(int c, void *context);
 struct fsm_rule xml_rules[] = {
   RULE_WHITESPACE(XML_STATE_0, XML_STATE_1),
   {XML_STATE_1, fsm_char, '<', XML_STATE_TAG},
-  /*{XML_STATE_TAG, fsm_char, '?', XML_STATE_HEAD}, */
+  {XML_STATE_TAG, fsm_char, '?', XML_STATE_HEAD},
   /*{XML_STATE_TAG, fsm_char, '!', XML_STATE_COMMENT}, */
   {XML_STATE_TAG, isspace, 0, XML_STATE_TAG_1},
   {XML_STATE_TAG, isalnum, 0, XML_STATE_NODE, fsm_reject},
   {XML_STATE_TAG_1, isspace, 0, XML_STATE_TAG_1},
   {XML_STATE_TAG_1, isalnum, 0, XML_STATE_NODE, fsm_reject},
 
+  /* xml head */
+  /* TODO: parse head appropriately */
+  {XML_STATE_HEAD, fsm_char, '?', XML_STATE_HEAD_1},
+  {XML_STATE_HEAD, fsm_true, 0, XML_STATE_HEAD},
+  {XML_STATE_HEAD_1, fsm_char, '>', XML_STATE_0},
+
+  /* xml comments */
+  /* TODO: add comment states */
+
   /* xml node */
   RULE_WHITESPACE(XML_STATE_NODE, XML_STATE_NODE_1),
   RULE_ID(XML_STATE_NODE_1, XML_STATE_NODE_ATTR, node_id_end),
   RULE_NODE_ATTR(XML_STATE_NODE_ATTR, XML_STATE_NODE_ATTR_END),
   {XML_STATE_NODE_ATTR_END, fsm_char, '/', XML_STATE_NODE_ATTR_END_1},
-  {XML_STATE_NODE_ATTR_END, fsm_char, '>', XML_STATE_CONTENTS, node_contents},
-  {XML_STATE_NODE_ATTR_END_1, fsm_char, '>', XML_STATE_CONTENTS, node_empty},
+  {XML_STATE_NODE_ATTR_END, fsm_char, '>', XML_STATE_NODE_HEAD,
+   node_contents},
+  {XML_STATE_NODE_ATTR_END_1, fsm_char, '>', XML_STATE_NODE_END, node_empty},
+  {XML_STATE_NODE_HEAD, fsm_true, 0, XML_STATE_CONTENTS, contents_start},
 
   /* node contents */
-  {XML_STATE_CONTENTS, fsm_true, 0, XML_STATE_CONTENTS_0, contents_start},
-  {XML_STATE_CONTENTS_0, fsm_char, '<', XML_STATE_CONTENTS_1, node_text_end},
-  RULE_TEXT(XML_STATE_CONTENTS_0, XML_STATE_CONTENTS_0),
+  {XML_STATE_CONTENTS, fsm_char, '<', XML_STATE_CONTENTS_1, node_text_end},
+  RULE_TEXT(XML_STATE_CONTENTS, XML_STATE_CONTENTS),
   /*{XML_STATE_CONTENTS_1, fsm_char, '!', XML_STATE_CONTENTS_2},*/
   {XML_STATE_CONTENTS_1, fsm_char, '/', XML_STATE_CONTENTS_3},
   {XML_STATE_CONTENTS_1, fsm_true, 0, XML_STATE_NODE, node_start},
@@ -130,7 +131,8 @@ struct fsm_rule xml_rules[] = {
   /* node end */
   RULE_ID(XML_STATE_CONTENTS_3, XML_STATE_CONTENTS_4, node_tail_end),
   RULE_WHITESPACE(XML_STATE_CONTENTS_4, XML_STATE_CONTENTS_5),
-  {XML_STATE_CONTENTS_5, fsm_char, '>', XML_STATE_CONTENTS_0},
+  {XML_STATE_CONTENTS_5, fsm_char, '>', XML_STATE_NODE_END},
+  {XML_STATE_NODE_END, fsm_true, 0, XML_STATE_CONTENTS, fsm_reject},
 
   {0}
 };
@@ -180,7 +182,7 @@ xml_next_char(int c, struct xml *xml)
   xml->state = fsm_run(xml->fsm, c, xml->state, xml);
   return xml->state < 0 ? -1 : 0;
 }
-
+
 static int
 ischarid(int c)
 {
@@ -199,20 +201,15 @@ push_node(int n, int data, struct pool *p, struct pool *stack)
   struct xml_node *node;
   int h, *ptr;
 
-  fprintf(stderr, "push_node %d %d (used: %d)\n", n, data, p->used);
-
   node = (struct xml_node *)pool_ptr(p, n);
-  fprintf(stderr, "push_node node: %p\n", node);
   if (!node)
     return -1;
   node->data = data;
   h = pool_new(stack, sizeof(n));
   ptr = (int *)pool_ptr(stack, h);
-  fprintf(stderr, "push_node h: %d pts: %p\n", h, ptr);
   if (!ptr)
     return -1;
   *ptr = n;
-  fprintf(stderr, "push_node returns\n");
   return 0;
 }
 
@@ -265,51 +262,32 @@ node_id_end(int c, void *context)
   struct xml *xml = (struct xml *)context;
   xml->node_id = xml->id;
   xml->id = POOL_NIL;
+#if 0
   fprintf(stderr, "node_id_end id: '%s'\n",
           pool_ptr(&xml->mem, xml->node_id));
+#endif
   xml->attrs = POOL_NIL;
   return 1;
-}
-
-static int
-node_attr_id_start(int c, void *context)
-{
-  return 0;
-}
-
-static int
-node_attr_id_body(int c, void *context)
-{
-  return 0;
 }
 
 static int
 node_attr_id_end(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
+#if 0
   fprintf(stderr, "node_attr_id_end '%s'\n", pool_ptr(&xml->mem, xml->id));
+#endif
   return 1;
-}
-
-static int
-node_attr_value_start(int c, void *context)
-{
-  return 0;
-}
-
-static int
-node_attr_value_body(int c, void *context)
-{
-  return 0;
 }
 
 static int
 node_attr_value_end(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
-
+#if 0
   fprintf(stderr, "attr '%s' = '%s' prev: %d\n", pool_ptr(&xml->mem, xml->id),
           pool_ptr(&xml->mem, xml->text), xml->attrs);
+#endif
   xml->attrs = xml_make_attr(xml->id, xml->text, xml->attrs, &xml->mem);
   xml->id = xml->text = POOL_NIL;
   if (xml->attrs == POOL_NIL)
@@ -318,15 +296,8 @@ node_attr_value_end(int c, void *context)
 }
 
 static int
-node_attr_start(int c, void *context)
-{
-  return 0;
-}
-
-static int
 node_start(int c, void *context)
 {
-  fprintf(stderr, "node_start\n");
   return 1;
 }
 
@@ -340,8 +311,9 @@ dbg_show_node(int n, struct pool *p)
   node = (struct xml_node *)pool_ptr(p, n);
   if (node)
     d = node->data;
-
+#if 0
   fprintf(stderr, "NODE (d: %d): '%s'\n", d, str_from_xml_node(&mem, n, p));
+#endif
 }
 
 static int
@@ -349,17 +321,25 @@ add_node(struct xml *xml)
 {
   int n;
 
+#if 0
   fprintf(stderr, "add_node '%s'\n", pool_ptr(&xml->mem, xml->node_id));
+#endif
   n = xml_make_node(xml->node_id, xml->attrs, POOL_NIL, &xml->mem);
   if (n == POOL_NIL)
     return POOL_NIL;
   xml->attrs = POOL_NIL;
+#if 0
   fprintf(stderr, "add_node_item to %d ", xml->data);
+#endif
   xml->data = xml_add_data(n, XML_NODE, xml->data, &xml->mem);
+#if 0
   fprintf(stderr, "=> %d\n", xml->data);
+#endif
   if (xml->data == POOL_NIL)
     return POOL_NIL;
+#if 0
   dbg_show_node(n, &xml->mem);
+#endif
   return n;
 }
 
@@ -373,7 +353,9 @@ node_empty(int c, void *context)
   if (n == POOL_NIL)
     return -1;
   xml->last_node = xml->node;
+#if 0
   fprintf(stderr, "node_empty '%s'\n", pool_ptr(&xml->mem, xml->node_id));
+#endif
   xml->node_id = POOL_NIL;
   return 0;
 }
@@ -384,7 +366,9 @@ node_contents(int c, void *context)
   struct xml *xml = (struct xml *)context;
   int n;
 
+#if 0
   fprintf(stderr, "node '%s' contents\n", pool_ptr(&xml->mem, xml->node_id));
+#endif
 
   n = add_node(xml);
   if (n == POOL_NIL)
@@ -408,18 +392,6 @@ contents_start(int c, void *context)
 }
 
 static int
-node_tail_start(int c, void *context)
-{
-  return 0;
-}
-
-static int
-node_tail_body(int c, void *context)
-{
-  return 0;
-}
-
-static int
 node_tail_end(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
@@ -431,12 +403,16 @@ node_tail_end(int c, void *context)
     return -1;
   sid = pool_ptr(&xml->mem, xml->id);
   sname = pool_ptr(&xml->mem, node->name);
+#if 0
   fprintf(stderr, "node %d:'%s'/'%s' end\n", xml->node, sid, sname);
+#endif
   if (!sid || !sname || strcmp(sid, sname) != 0)
     return -1;
   if (xml_set_node_data(xml->node, xml->data, &xml->mem))
     return -1;
+#if 0
   dbg_show_node(xml->node, &xml->mem);
+#endif
   xml->last_node = xml->node;
   if (pop_node(&xml->node, &xml->data, &xml->mem, &xml->stack)
       || xml->node == POOL_NIL)
@@ -473,7 +449,6 @@ entity_end(int c, void *context)
   struct xml *xml = (struct xml *)context;
   int i;
 
-  fprintf(stderr, "entity: '%s'\n", xml->text_ent);
   for (i = 0; xml_symbols[i].id; i++)
     if (!strcmp(xml_symbols[i].id, xml->text_ent))
       break;
@@ -485,13 +460,6 @@ entity_end(int c, void *context)
   xml->text_ent[0] = 0;
   xml->text_ent_len = 0;
 
-  return 0;
-}
-
-static int
-hex_number_start(int c, void *context)
-{
-  fprintf(stderr, "hex start: '%c'\n", c);
   return 0;
 }
 
@@ -534,7 +502,6 @@ hex_number_end(int c, void *context)
   unsigned int res;
 
   res = strtoul(xml->text_ent, 0, 16);
-  fprintf(stderr, "hex end: '%c' value: '%s' d: %x\n", c, xml->text_ent, res);
   xml->text_ent[0] = 0;
   xml->text_ent_len = 0;
   if (insert_utf8_char(res, xml))
@@ -546,7 +513,6 @@ static int
 dec_number_start(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
-  fprintf(stderr, "dec start: '%c'\n", c);
   xml->text_ent_len = 1;
   xml->text_ent[0] = c;
   xml->text_ent[1] = 0;
@@ -560,7 +526,6 @@ dec_number_end(int c, void *context)
   unsigned int res;
 
   res = atoi(xml->text_ent);
-  fprintf(stderr, "dec end: '%c' value: '%s'\n", c, xml->text_ent);
   xml->text_ent[0] = 0;
   xml->text_ent_len = 0;
   if (insert_utf8_char(res, xml))
@@ -575,8 +540,6 @@ text_start(int c, void *context)
   xml->text = pool_append_char(&xml->mem, POOL_NIL, c);
   if (xml->text == POOL_NIL)
     return -1;
-
-  fprintf(stderr, "text_start text: '%s'\n", pool_ptr(&xml->mem, xml->text));
   return 0;
 }
 
@@ -587,8 +550,6 @@ text_body(int c, void *context)
   xml->text = pool_append_char(&xml->mem, xml->text, c);
   if (xml->text == POOL_NIL)
     return -1;
-
-  fprintf(stderr, "text_body text: '%s'\n", pool_ptr(&xml->mem, xml->text));
   return 0;
 }
 
@@ -597,10 +558,11 @@ node_text_end(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
 
-  fprintf(stderr, "node_text_end text: '%s' to %d ",
-          pool_ptr(&xml->mem, xml->text), xml->data);
+#if 0
+  fprintf(stderr, "node_text_end text: '%s'\n",
+          pool_ptr(&xml->mem, xml->text));
+#endif
   xml->data = xml_add_data(xml->text, XML_TEXT, xml->data, &xml->mem);
-  fprintf(stderr, "=> %d\n", xml->data);
   if (xml->data == POOL_NIL)
     return -1;
   xml->text = POOL_NIL;
