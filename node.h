@@ -1,5 +1,4 @@
 enum xml_type {
-  XML_EMPTY = 0,
   XML_NODE,
   XML_TEXT
 };
@@ -34,6 +33,8 @@ char *xml_attr_value(int attr, struct pool *p);
 
 int xml_new(const char *name, struct pool *p);
 int xml_node_add_attr(int node, char *id, char *value, struct pool *p);
+int xml_node_add_text(int node, const char *text, struct pool *p);
+int xml_node_add_text_id(int node, int text, struct pool *p);
 
 struct xml_data *xml_node_data(int node, struct pool *p);
 struct xml_data *xml_data_next(struct xml_data *d, struct pool *p);

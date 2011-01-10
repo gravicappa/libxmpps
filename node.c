@@ -33,7 +33,7 @@ xml_printf(struct pool *pool, int h, const char *fmt, ...)
   va_list args;
   int mark, n;
   char buf[32];
-  char *prev, *s;
+  const char *prev, *s;
 
   va_start(args, fmt);
   mark = pool_state(pool);
@@ -150,13 +150,13 @@ xml_new(const char *name, struct pool *p)
   return xml_make_node(pool_new_str(p, name), POOL_NIL, POOL_NIL, p);
 }
 
-int
+static int
 xml_make_attr_s(char *name, char *value, int next, struct pool *p)
 {
   int mark, h;
 
   mark = pool_state(p);
-  h = xml_make_attr(pool_new_str(p, name), pool_new_str(p, name), next, p);
+  h = xml_make_attr(pool_new_str(p, name), pool_new_str(p, value), next, p);
   if (h == POOL_NIL)
     pool_restore(p, mark);
   return h;
@@ -175,6 +175,38 @@ xml_node_add_attr(int node, char *id, char *value, struct pool *p)
     return -1;
   n->attr = a;
   return 0;
+}
+
+int
+xml_node_add_text_id(int node, int text, struct pool *p)
+{
+  struct xml_node *n = 0;
+  struct xml_data *d, *last = 0;
+  int h, r = 0, mark;
+
+  for (d = xml_node_data(node, p); d; d = xml_data_next(d, p))
+    last = d;
+
+  mark = pool_state(p);
+  h = xml_add_data(text, XML_TEXT, POOL_NIL, p);
+  if (last)
+    last->next = h;
+  else {
+    n = (struct xml_node *)pool_ptr(p, node);
+    if (n)
+      n->data = h;
+  }
+  if ((!last && !n) || h == POOL_NIL || r) {
+    pool_restore(p, mark);
+    return 1;
+  }
+  return 0;
+}
+
+int
+xml_node_add_text(int node, const char *text, struct pool *p)
+{
+  return xml_node_add_text_id(node, pool_new_str(p, text), p);
 }
 
 int
@@ -262,15 +294,13 @@ xml_node_data(int node, struct pool *p)
 {
   struct xml_node *n;
   n = (struct xml_node *)pool_ptr(p, node);
-  if (!n)
-    return POOL_NIL;
-  return (struct xml_data *)pool_ptr(p, n->data);
+  return n ? (struct xml_data *)pool_ptr(p, n->data) : 0;
 }
 
 struct xml_data *
 xml_data_next(struct xml_data *d, struct pool *p)
 {
-  return d ? (struct xml_data *)pool_ptr(p, d->next) : POOL_NIL;
+  return d ? (struct xml_data *)pool_ptr(p, d->next) : 0;
 }
 
 int
@@ -292,8 +322,6 @@ char *
 xml_node_text(int node, struct pool *p)
 {
   struct xml_data *d;
-  int data;
-
   for (d = xml_node_data(node, p); d; d = xml_data_next(d, p))
     if (d->type == XML_TEXT)
       return pool_ptr(p, d->value);
