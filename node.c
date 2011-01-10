@@ -145,6 +145,12 @@ xml_make_attr(int name, int value, int next, struct pool *p)
 }
 
 int
+xml_new(const char *name, struct pool *p)
+{
+  return xml_make_node(pool_new_str(p, name), POOL_NIL, POOL_NIL, p);
+}
+
+int
 xml_make_attr_s(char *name, char *value, int next, struct pool *p)
 {
   int mark, h;
@@ -154,6 +160,21 @@ xml_make_attr_s(char *name, char *value, int next, struct pool *p)
   if (h == POOL_NIL)
     pool_restore(p, mark);
   return h;
+}
+
+int
+xml_node_add_attr(int node, char *id, char *value, struct pool *p)
+{
+  struct xml_node *n;
+  int a;
+  n = (struct xml_node *)pool_ptr(p, node);
+  if (!n)
+    return -1;
+  a = xml_make_attr_s(id, value, n->attr, p);
+  if (a == POOL_NIL)
+    return -1;
+  n->attr = a;
+  return 0;
 }
 
 int

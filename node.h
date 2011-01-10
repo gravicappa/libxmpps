@@ -32,6 +32,9 @@ char *xml_node_name(int node, struct pool *p);
 char *xml_node_text(int node, struct pool *p);
 char *xml_attr_value(int attr, struct pool *p);
 
+int xml_new(const char *name, struct pool *p);
+int xml_node_add_attr(int node, char *id, char *value, struct pool *p);
+
 struct xml_data *xml_node_data(int node, struct pool *p);
 struct xml_data *xml_data_next(struct xml_data *d, struct pool *p);
 int xml_node_find_attr(int node, char *name, struct pool *p);
