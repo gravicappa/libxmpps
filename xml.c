@@ -19,10 +19,7 @@ static int ischarhex(int c);
 static int id_start(int c, void *context);
 static int id_body(int c, void *context);
 
-static int node_start(int c, void *context);
 static int node_id_end(int c, void *context);
-
-static int node_attr_id_end(int c, void *context);
 
 static int node_attr_value_end(int c, void *context);
 
@@ -37,11 +34,8 @@ static int entity_start(int c, void *context);
 static int entity_body(int c, void *context);
 static int entity_end(int c, void *context);
 
-static int hex_number_body(int c, void *context);
 static int hex_number_end(int c, void *context);
-
 static int dec_number_start(int c, void *context);
-static int dec_number_body(int c, void *context);
 static int dec_number_end(int c, void *context);
 
 static int text_start(int c, void *context);
@@ -82,7 +76,7 @@ static int node_text_end(int c, void *context);
   RULE_WHITESPACE(s, s ## _X1), \
   {s ## _X1, fsm_char, '/', next, fsm_reject}, \
   {s ## _X1, fsm_char, '>', next, fsm_reject}, \
-  RULE_ID(s ## _X1, s ## _X4, node_attr_id_end),\
+  RULE_ID(s ## _X1, s ## _X4, fsm_reject),\
   RULE_WHITESPACE(s ## _X4, s ## _X5), \
   {s ## _X5, fsm_char, '=', s ## _X6}, \
   RULE_WHITESPACE(s ## _X6, s ## _X7), \
@@ -125,7 +119,7 @@ struct fsm_rule xml_rules[] = {
   RULE_TEXT(XML_STATE_CONTENTS, XML_STATE_CONTENTS),
   /*{XML_STATE_CONTENTS_1, fsm_char, '!', XML_STATE_CONTENTS_2},*/
   {XML_STATE_CONTENTS_1, fsm_char, '/', XML_STATE_CONTENTS_3},
-  {XML_STATE_CONTENTS_1, fsm_true, 0, XML_STATE_NODE, node_start},
+  {XML_STATE_CONTENTS_1, fsm_true, 0, XML_STATE_NODE, fsm_reject},
   /*{XML_STATE_CONTENTS_2, fsm_char, '-', XML_STATE_COMMENT},*/
   /*{XML_STATE_CONTENTS_2, fsm_char, '[', XML_STATE_SPECIAL},*/
 
@@ -178,8 +172,6 @@ xml_clean(struct xml *xml)
 int
 xml_next_char(int c, struct xml *xml)
 {
-  int s, h;
-
   xml->state = fsm_run(xml->fsm, c, xml->state, xml);
   return xml->state < 0 ? -1 : 0;
 }
@@ -242,9 +234,7 @@ id_start(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
   xml->id = pool_append_char(&xml->mem, POOL_NIL, c);
-  if (xml->id == POOL_NIL)
-    return -1;
-  return 0;
+  return (xml->id == POOL_NIL) ? -1 : 0;
 }
 
 static int
@@ -252,9 +242,7 @@ id_body(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
   xml->id = pool_append_char(&xml->mem, xml->id, c);
-  if (xml->id == POOL_NIL)
-    return -1;
-  return 0;
+  return (xml->id == POOL_NIL) ? -1 : 0;
 }
 
 static int
@@ -272,16 +260,6 @@ node_id_end(int c, void *context)
 }
 
 static int
-node_attr_id_end(int c, void *context)
-{
-  struct xml *xml = (struct xml *)context;
-#if 0
-  fprintf(stderr, "node_attr_id_end '%s'\n", pool_ptr(&xml->mem, xml->id));
-#endif
-  return 1;
-}
-
-static int
 node_attr_value_end(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
@@ -291,29 +269,23 @@ node_attr_value_end(int c, void *context)
 #endif
   xml->attrs = xml_make_attr(xml->id, xml->text, xml->attrs, &xml->mem);
   xml->id = xml->text = POOL_NIL;
-  if (xml->attrs == POOL_NIL)
-    return -1;
-  return 0;
-}
-
-static int
-node_start(int c, void *context)
-{
-  return 1;
+  return (xml->attrs == POOL_NIL) ? -1 : 0;
 }
 
 static void
 dbg_show_node(int n, struct pool *p)
 {
-  struct pool mem = { 4096 };
+#if 0
   struct xml_node *node;
   int d = -1;
 
   node = (struct xml_node *)pool_ptr(p, n);
   if (node)
     d = node->data;
-#if 0
-  fprintf(stderr, "NODE (d: %d): '%s'\n", d, str_from_xml_node(&mem, n, p));
+  {
+    struct pool mem = { 4096 };
+    fprintf(stderr, "NODE (d: %d): '%s'\n", d, str_from_xml_node(&mem, n, p));
+  }
 #endif
 }
 
@@ -460,7 +432,6 @@ entity_end(int c, void *context)
     return -1;
   xml->text_ent[0] = 0;
   xml->text_ent_len = 0;
-
   return 0;
 }
 
@@ -492,7 +463,7 @@ insert_utf8_char(unsigned int x, struct xml *xml)
   i = 1;
   for (; off > 0; off -= 6)
     buf[i++] = ((x >> (off - 6)) & 0x3f) | 0x80;
-  xml->text = pool_append_str(&xml->mem, xml->text, buf);
+  xml->text = pool_append_str(&xml->mem, xml->text, (char *)buf);
   return (xml->text != POOL_NIL) ? 0 : -1;
 }
 
@@ -505,9 +476,7 @@ hex_number_end(int c, void *context)
   res = strtoul(xml->text_ent, 0, 16);
   xml->text_ent[0] = 0;
   xml->text_ent_len = 0;
-  if (insert_utf8_char(res, xml))
-    return -1;
-  return 0;
+  return (insert_utf8_char(res, xml) == 0) ? 0 : -1;
 }
 
 static int
@@ -529,9 +498,7 @@ dec_number_end(int c, void *context)
   res = atoi(xml->text_ent);
   xml->text_ent[0] = 0;
   xml->text_ent_len = 0;
-  if (insert_utf8_char(res, xml))
-    return -1;
-  return 0;
+  return (insert_utf8_char(res, xml) == 0) ? 0 : -1;
 }
 
 static int
@@ -539,9 +506,7 @@ text_start(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
   xml->text = pool_append_char(&xml->mem, POOL_NIL, c);
-  if (xml->text == POOL_NIL)
-    return -1;
-  return 0;
+  return (xml->text == POOL_NIL) ? -1 : 0;
 }
 
 static int
@@ -549,9 +514,7 @@ text_body(int c, void *context)
 {
   struct xml *xml = (struct xml *)context;
   xml->text = pool_append_char(&xml->mem, xml->text, c);
-  if (xml->text == POOL_NIL)
-    return -1;
-  return 0;
+  return (xml->text == POOL_NIL) ? -1 : 0;
 }
 
 static int
