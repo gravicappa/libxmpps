@@ -353,7 +353,7 @@ node_empty(int c, void *context)
   n = add_node(xml);
   if (n == POOL_NIL)
     return -1;
-  xml->last_node = xml->node;
+  xml->last_node = n;
 #if 0
   fprintf(stderr, "node_empty '%s'\n", pool_ptr(&xml->mem, xml->node_id));
 #endif
