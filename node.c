@@ -274,18 +274,6 @@ xml_set_node_data(int node, int datalist, struct pool *p)
 }
 
 int
-xml_add_attr(int attr, int attrlist, struct pool *p)
-{
-  struct xml_attr *a;
-
-  a = (struct xml_attr *)pool_ptr(p, attr);
-  if (!a)
-    return -1;
-  a->next = attrlist;
-  return attr;
-}
-
-int
 xml_add_data(int x, enum xml_type type, int list, struct pool *p)
 {
   int h;
@@ -309,15 +297,7 @@ xml_node_name(int node, struct pool *p)
   return n ? pool_ptr(p, n->name) : 0;
 }
 
-char *
-xml_attr_value(int attr, struct pool *p)
-{
-  struct xml_attr *a;
-  a = (struct xml_attr *)pool_ptr(p, attr);
-  return a ? pool_ptr(p, a->value) : 0;
-}
-
-int
+const char *
 xml_node_find_attr(int node, const char *name, struct pool *p)
 {
   struct xml_node *n;
@@ -327,18 +307,18 @@ xml_node_find_attr(int node, const char *name, struct pool *p)
 
   n = (struct xml_node *)pool_ptr(p, node);
   if (!n)
-    return POOL_NIL;
+    return 0;
   attr = n->attr;
   while (attr != POOL_NIL) {
     a = (struct xml_attr *)pool_ptr(p, attr);
     if (!a)
-      return POOL_NIL;
+      return 0;
     s = pool_ptr(p, a->name);
     if (s && !strcmp(s, name))
-      return attr;
+      return pool_ptr(p, a->value);
     attr = a->next;
   }
-  return POOL_NIL;
+  return 0;
 }
 
 struct xml_data *

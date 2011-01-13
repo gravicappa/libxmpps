@@ -41,7 +41,7 @@ int xml_node_add_textn(int node, int len, const char *text, struct pool *p);
 
 struct xml_data *xml_node_data(int node, struct pool *p);
 struct xml_data *xml_data_next(struct xml_data *d, struct pool *p);
-int xml_node_find_attr(int node, const char *name, struct pool *p);
+const char *xml_node_find_attr(int node, const char *name, struct pool *p);
 int xml_node_find(int node, const char *name, struct pool *p);
 
 int reverse_datalist(int datalist, struct pool *p);
