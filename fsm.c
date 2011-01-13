@@ -3,23 +3,6 @@
 #include <stdio.h>
 #include "fsm.h"
 
-int
-fsm_run_rules(struct fsm_rule *rules, int in, int state, void *context)
-{
-  int i;
-
-  while (1)
-    for (i = 0; rules[i].pred || rules[i].in >= 0; i++)
-      if (rules[i].state == state
-          && ((rules[i].pred == fsm_char && rules[i].in == in)
-              || rules[i].pred(in))) {
-        if (rules[i].fn && rules[i].fn(in, context))
-          break;
-        return rules[i].next;
-      }
-  return FSM_ERROR;
-}
-
 static void
 fsm_print_rule(FILE *out, struct fsm_rule *r)
 {

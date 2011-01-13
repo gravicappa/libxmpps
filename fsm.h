@@ -19,11 +19,8 @@ struct fsm {
 };
 
 struct fsm *make_fsm(struct fsm_rule *rules);
-int fsm_run_rules(struct fsm_rule *rules, int in, int state, void *context);
 int fsm_run(struct fsm *fsm, int in, int state, void *context);
-
 void print_fsm(struct fsm *fsm);
-
 int fsm_char(int in);
 int fsm_true(int in);
 int fsm_reject(int in, void *context);
