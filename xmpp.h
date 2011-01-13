@@ -14,34 +14,45 @@ enum xmpp_state {
 };
 
 struct io {
-  int (*send)(int bytes, char *buf, void *user);
+  int (*send)(int bytes, const char *buf, void *user);
   int (*recv)(int bytes, char *buf, void *user);
 };
 
 struct xmpp {
   struct xml xml;
   struct pool mem;
-  struct jid jid;
   struct io *io;
+
   enum xmpp_state state;
+
+  int use_tls;
+  int use_sasl;
+  int use_plain;
+
+  int features;
+  int is_authorized;
+  int xml_mem_state;
+
+  char *jid;
   char server[XMPP_BUF_BYTES];
-  char auth_user[XMPP_BUF_BYTES];
-  char auth_pwd[XMPP_BUF_BYTES];
+  char user[XMPP_BUF_BYTES];
+  char pwd[XMPP_BUF_BYTES];
 
   int (*stream_fn)(int node, void *user);
   int (*node_fn)(int node, void *user);
   int (*error_fn)(char *msg, void *user);
+  void (*log_fn)(int dir, char *msg, int node, void *user);
 };
 
-struct jid {
-  char *full;
-  char *partial;
-  char *name;
-  char *server;
-  char *resource;
-};
-
+int xmpp_init(struct xmpp *xmpp, int stack_size);
+void xmpp_clean(struct xmpp *xmpp);
 int xmpp_process_input(int bytes, const char *buf, struct xmpp *xmpp, 
                        void *user);
 int xmpp_send_node(int node, struct xmpp *xmpp);
 int xmpp_default_node_hook(int node, struct xmpp *xmpp);
+int xmpp_start(struct xmpp *xmpp);
+
+char *jid_name(char *jid, int *len);
+char *jid_partial(char *jid, int *len);
+char *jid_server(char *jid, int *len);
+char *jid_resource(char *jid, int *len);
