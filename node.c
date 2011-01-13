@@ -4,11 +4,15 @@
 #include "pool.h"
 #include "node.h"
 
+int xml_node_add_data(int node, int data, struct pool *p);
+
 int
 xml_append_esc(struct pool *pool, int h, const char *str)
 {
   int mark;
 
+  if (!str)
+    return h;
   mark = pool_state(pool);
   for (; *str; str++) {
     switch (*str) {
@@ -43,6 +47,14 @@ xml_printf(struct pool *pool, int h, const char *fmt, ...)
     h = pool_append_strn(pool, h, prev, s - prev);
     s++;
     switch (*s) {
+    case 'c':
+      buf[0] = (char)va_arg(args, int);
+      buf[1] = 0;
+      h = xml_append_esc(pool, h, buf);
+      break;
+    case 'C':
+      h = pool_append_char(pool, h, (char)va_arg(args, int));
+      break;
     case 's':
       h = xml_append_esc(pool, h, va_arg(args, const char *));
       break;
@@ -150,8 +162,30 @@ xml_new(const char *name, struct pool *p)
   return xml_make_node(pool_new_str(p, name), POOL_NIL, POOL_NIL, p);
 }
 
+int
+xml_insert(int x, const char *name, struct pool *p)
+{
+  int n, h, mark;
+
+  if (x == POOL_NIL)
+    return POOL_NIL;
+
+  mark = pool_state(p);
+  n = xml_new(name, p);
+  if (n == POOL_NIL) {
+    pool_restore(p, mark);
+    return POOL_NIL;
+  }
+  h = xml_add_data(n, XML_NODE, POOL_NIL, p);
+  if (h == POOL_NIL || xml_node_add_data(x, h, p)) {
+    pool_restore(p, mark);
+    return 1;
+  }
+  return 0;
+}
+
 static int
-xml_make_attr_s(char *name, char *value, int next, struct pool *p)
+xml_make_attr_s(const char *name, const char *value, int next, struct pool *p)
 {
   int mark, h;
 
@@ -163,7 +197,7 @@ xml_make_attr_s(char *name, char *value, int next, struct pool *p)
 }
 
 int
-xml_node_add_attr(int node, char *id, char *value, struct pool *p)
+xml_node_add_attr(int node, const char *id, const char *value, struct pool *p)
 {
   struct xml_node *n;
   int a;
@@ -178,25 +212,37 @@ xml_node_add_attr(int node, char *id, char *value, struct pool *p)
 }
 
 int
-xml_node_add_text_id(int node, int text, struct pool *p)
+xml_node_add_data(int node, int data, struct pool *p)
 {
   struct xml_node *n = 0;
   struct xml_data *d, *last = 0;
-  int h, r = 0, mark;
+  int mark;
+
+  if (data == POOL_NIL)
+    return -1;
 
   for (d = xml_node_data(node, p); d; d = xml_data_next(d, p))
     last = d;
 
   mark = pool_state(p);
-  h = xml_add_data(text, XML_TEXT, POOL_NIL, p);
   if (last)
-    last->next = h;
+    last->next = data;
   else {
     n = (struct xml_node *)pool_ptr(p, node);
-    if (n)
-      n->data = h;
+    if (!n)
+      return -1;
+    n->data = data;
   }
-  if ((!last && !n) || h == POOL_NIL || r) {
+  return 0;
+}
+
+int
+xml_node_add_text_id(int node, int text, struct pool *p)
+{
+  int h, mark;
+  mark = pool_state(p);
+  h = xml_add_data(text, XML_TEXT, POOL_NIL, p);
+  if (h == POOL_NIL || xml_node_add_data(node, h, p)) {
     pool_restore(p, mark);
     return 1;
   }
@@ -207,6 +253,12 @@ int
 xml_node_add_text(int node, const char *text, struct pool *p)
 {
   return xml_node_add_text_id(node, pool_new_str(p, text), p);
+}
+
+int
+xml_node_add_textn(int node, int len, const char *text, struct pool *p)
+{
+  return xml_node_add_text_id(node, pool_new_strn(p, text, len), p);
 }
 
 int
@@ -266,7 +318,7 @@ xml_attr_value(int attr, struct pool *p)
 }
 
 int
-xml_node_find_attr(int node, char *name, struct pool *p)
+xml_node_find_attr(int node, const char *name, struct pool *p)
 {
   struct xml_node *n;
   struct xml_attr *a;
@@ -304,7 +356,7 @@ xml_data_next(struct xml_data *d, struct pool *p)
 }
 
 int
-xml_node_find(int node, char *name, struct pool *p)
+xml_node_find(int node, const char *name, struct pool *p)
 {
   struct xml_data *d;
   char *s;
