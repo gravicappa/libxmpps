@@ -1,20 +1,44 @@
-TARG = test_fsm
+name = libxmpp
+TARG = $name.a
 CC = pcc
 CFLAGS = -O0 -g -Wall -pedantic
+O = o
+LIBFILES = xml.o fsm.o pool.o node.o xmpp.o md5.o base64.o
 
 < config.mk
 
-test:V: test_xml
+default:V: sjc
+
+run_xmpp_test:V: test_xmpp
+	rm -f core
+  ulimit -c 65536
+	#./test_xmpp < test/xmpp1.xml
+	./test_xmpp < test/sasl.xml
+  ulimit -c 0
+
+run_xml_test:V: test_xml
+	rm -f core
   ulimit -c 65536
   ./test_xml < test/xmpp1.xml
   ulimit -c 0
 
 clean:V:
-  rm -f *.o test_xml
+  rm -f *.o test_xml test_xmpp $name.a sjc
 
-test_xml: test_xml.o xml.o fsm.o pool.o node.o
+$name.a(%.$O):N: %.$O
 
-xml.o: xml.c xml_states.h
+$name.a: $LIBFILES
+	ar rcu $target $prereq
+
+test_xml: test_xml.$O xml.$O fsm.$O pool.$O node.$O
+
+test_xmpp: test_xmpp.$O $LIBFILES
+
+test_base64: test_base64.o base64.o
+
+sjc: sjc.$O $name.a
+
+xml.$O: xml.c xml_states.h
 
 xml_states.h: xml.c
   awk < $prereq '!inside && /^#define RULE/ { inside = 1; print; next; }
@@ -34,8 +58,8 @@ xml_states.h: xml.c
          }' \
   > $target
 
-%: %.o
+%: %.$O
   $CC $CFLAGS $LDFLAGS -o $target $prereq
 
-%.o: %.c
+%.$O: %.c
   $CC $CFLAGS -c $stem.c -o $target
