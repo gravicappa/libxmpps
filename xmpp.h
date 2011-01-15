@@ -10,7 +10,7 @@ enum xmpp_state {
   XMPP_STATE_ERROR = -1,
   XMPP_STATE_NORMAL,
   XMPP_STATE_TLS,
-  XMPP_STATE_SASL,
+  XMPP_STATE_SASL
 };
 
 struct io {
@@ -31,6 +31,7 @@ struct xmpp {
 
   int features;
   int is_authorized;
+  int is_ready;
   int xml_mem_state;
 
   char *jid;
@@ -39,6 +40,7 @@ struct xmpp {
   char pwd[XMPP_BUF_BYTES];
 
   int (*stream_fn)(int node, void *user);
+  int (*auth_fn)(int node, void *user);
   int (*node_fn)(int node, void *user);
   int (*error_fn)(char *msg, void *user);
   void (*log_fn)(int dir, char *msg, int node, void *user);
@@ -49,7 +51,7 @@ void xmpp_clean(struct xmpp *xmpp);
 int xmpp_process_input(int bytes, const char *buf, struct xmpp *xmpp, 
                        void *user);
 int xmpp_send_node(int node, struct xmpp *xmpp);
-int xmpp_default_node_hook(int node, struct xmpp *xmpp);
+int xmpp_default_node_hook(int node, struct xmpp *xmpp, void *user);
 int xmpp_start(struct xmpp *xmpp);
 
 char *jid_name(char *jid, int *len);

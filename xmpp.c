@@ -84,8 +84,6 @@ xmpp_process_input(int bytes, const char *buf, struct xmpp *xmpp, void *user)
         pool_clean(&xmpp->xml.mem);
       if (xmpp->xml.level != 1)
         break;
-      fprintf(stderr, "node: %d last_node: %d node_fn: %p\n", xmpp->xml.node,
-              xmpp->xml.last_node, xmpp->node_fn);
       if (xmpp->xml.last_node != POOL_NIL && xmpp->node_fn
           && xmpp->node_fn(xmpp->xml.last_node, user)) {
         pool_restore(&xmpp->xml.mem, xmpp->xml_mem_state);
@@ -95,6 +93,12 @@ xmpp_process_input(int bytes, const char *buf, struct xmpp *xmpp, void *user)
     }
   }
   return 0;
+}
+
+int
+xmpp_send_raw(int bytes, char *buf, struct xmpp *xmpp)
+{
+  return (xmpp->io->send(bytes, buf, xmpp->io) == bytes) ? 0 : -1;
 }
 
 int
@@ -110,20 +114,21 @@ xmpp_send_node(int node, struct xmpp *xmpp)
     ret = xmpp->io->send(bytes, s, xmpp->io);
   }
   pool_restore(&xmpp->mem, mark);
-  return ret;
+  return (ret == bytes) ? 0 : -1;
 }
 
 int
 xmpp_start_stream(const char *to, struct xmpp *xmpp)
 {
-  int mark, h, ret = -1;
+  int mark, h, n, ret = -1;
   char *s;
 
   mark = pool_state(&xmpp->mem);
   h = xml_printf(&xmpp->mem, POOL_NIL, xmpp_head_fmt, to);
   s = pool_ptr(&xmpp->mem, h);
-  if (s)
-    ret = xmpp->io->send(strlen(s), s, xmpp->io);
+  n = strlen(s);
+  if (s && (xmpp->io->send(n, s, xmpp->io) == n))
+    ret = 0;
   pool_restore(&xmpp->mem, mark);
   return ret;
 }
@@ -311,18 +316,12 @@ xmpp_make_sasl_response(char *msg, struct xmpp *xmpp)
   for (i = 0; i < SASL_CNONCE_LEN; i++)
     sprintf(cnonce + i * 8, "%08x", rand());
 
-  fprintf(stderr, "realm: '%s' nonce: '%s' cnonce: '%s'\n", realm, nonce,
-          cnonce);
-
   if (xmpp_escape_str(sizeof(user), user, xmpp->user)
       || xmpp_escape_str(sizeof(pwd), pwd, xmpp->pwd))
     return POOL_NIL;
 
-  fprintf(stderr, "user: '%s' pwd: '%s'\n", user, pwd);
-
   if (sasl_md5(md5sum, realm, nonce, cnonce, user, pwd, xmpp->server))
     return POOL_NIL;
-  fprintf(stderr, "md5sum: '%s'\n", md5sum);
 
   t = xml_printf(&xmpp->mem, POOL_NIL,
                  "username=\"%S\",realm=\"%S\",nonce=\"%S\",cnonce=\"%S\","
@@ -332,7 +331,6 @@ xmpp_make_sasl_response(char *msg, struct xmpp *xmpp)
   resp = pool_ptr(&xmpp->mem, t);
   if (!resp)
     return POOL_NIL;
-  fprintf(stderr, "resp: '%s'\n", resp);
   slen = strlen(resp);
   len = base64_enclen(slen) + 1;
   d = pool_new(&xmpp->mem, len);
@@ -354,7 +352,6 @@ xmpp_sasl_challenge(int node, struct xmpp *xmpp)
   if (!text)
     return -1;
   text = xmpp_trim_ws(text);
-  fprintf(stderr, "text: '%s'\n", text);
   slen = strlen(text);
   len = base64_declen(slen);
   mark = pool_state(&xmpp->mem);
@@ -364,7 +361,6 @@ xmpp_sasl_challenge(int node, struct xmpp *xmpp)
     return -1;
   }
   text = pool_ptr(&xmpp->mem, m);
-  fprintf(stderr, "decoded text: '%s'\n", text);
   if (!text) {
     pool_restore(&xmpp->mem, mark);
     return -1;
@@ -384,13 +380,13 @@ xmpp_sasl_challenge(int node, struct xmpp *xmpp)
 }
 
 int
-xmpp_default_node_hook(int node, struct xmpp *xmpp)
+xmpp_default_node_hook(int node, struct xmpp *xmpp, void *user)
 {
   char *id;
   id = xml_node_name(node, &xmpp->xml.mem);
   if (!id)
     return -1;
-  switch(xmpp->state) {
+  switch (xmpp->state) {
   case XMPP_STATE_TLS:
     if (!strcmp(id, "proceed")) {
       /* todo start tls on IO */
@@ -403,17 +399,23 @@ xmpp_default_node_hook(int node, struct xmpp *xmpp)
     if (!strcmp(id, "stream:features")) {
       xmpp->features = xmpp_stream_features(node, &xmpp->xml.mem);
       if (xmpp->is_authorized) {
-        if (xmpp->features & XMPP_FEATURE_BIND)
-          return xmpp_resource_bind(xmpp);
-        if (xmpp->features & XMPP_FEATURE_SESSION)
-          return xmpp_start_session(xmpp);
+        if ((xmpp->features & XMPP_FEATURE_BIND) && xmpp_resource_bind(xmpp))
+          return -1;
+        if ((xmpp->features & XMPP_FEATURE_SESSION)
+            && xmpp_start_session(xmpp))
+          return -1;
+        if (xmpp->auth_fn && xmpp->auth_fn(node, user))
+          return -1;
       } else if (xmpp->use_sasl)
-        return xmpp_authorize(xmpp);
+        return (xmpp_authorize(xmpp) == 0) ? 1 : -1;
       return 1;
     } else if (!strcmp(id, "challenge")) {
       return (xmpp_sasl_challenge(node, xmpp) == 0) ? 1 : -1;
-    } else if (!strcmp(id, "success"))
+    } else if (!strcmp(id, "success")) {
       xmpp->is_authorized = 1;
+      xml_reset(&xmpp->xml);
+      return (xmpp_start_stream(xmpp->server, xmpp) == 0) ? 1 : -1;
+    }
   }
   return 0;
 }
@@ -505,7 +507,8 @@ xmpp_start_session(struct xmpp *xmpp)
   mark = pool_state(&xmpp->mem);
   do {
     x = xml_new("iq", &xmpp->mem);
-    if (x == POOL_NIL || xml_node_add_attr(x, "type", "set", &xmpp->mem))
+    if (x == POOL_NIL || xml_node_add_attr(x, "type", "set", &xmpp->mem)
+        || xml_node_add_attr(x, "id", "auth", &xmpp->mem))
       break;
     y = xml_insert(x, "session", &xmpp->mem);
     if (y == POOL_NIL
