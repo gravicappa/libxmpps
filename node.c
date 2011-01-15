@@ -179,9 +179,9 @@ xml_insert(int x, const char *name, struct pool *p)
   h = xml_add_data(n, XML_NODE, POOL_NIL, p);
   if (h == POOL_NIL || xml_node_add_data(x, h, p)) {
     pool_restore(p, mark);
-    return 1;
+    return POOL_NIL;
   }
-  return 0;
+  return n;
 }
 
 static int
@@ -297,7 +297,7 @@ xml_node_name(int node, struct pool *p)
   return n ? pool_ptr(p, n->name) : 0;
 }
 
-const char *
+char *
 xml_node_find_attr(int node, const char *name, struct pool *p)
 {
   struct xml_node *n;
