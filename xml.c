@@ -279,23 +279,6 @@ node_attr_value_end(int c, void *context)
   return (xml->attrs == POOL_NIL) ? -1 : 0;
 }
 
-static void
-dbg_show_node(int n, struct pool *p)
-{
-#if 0
-  struct xml_node *node;
-  int d = -1;
-
-  node = (struct xml_node *)pool_ptr(p, n);
-  if (node)
-    d = node->data;
-  {
-    struct pool mem = { 4096 };
-    fprintf(stderr, "NODE (d: %d): '%s'\n", d, str_from_xml_node(&mem, n, p));
-  }
-#endif
-}
-
 static int
 add_node(struct xml *xml)
 {
@@ -315,12 +298,7 @@ add_node(struct xml *xml)
 #if 0
   fprintf(stderr, "=> %d\n", xml->data);
 #endif
-  if (xml->data == POOL_NIL)
-    return POOL_NIL;
-#if 0
-  dbg_show_node(n, &xml->mem);
-#endif
-  return n;
+  return (xml->data == POOL_NIL) ? POOL_NIL : n;
 }
 
 static int
@@ -390,9 +368,6 @@ node_tail_end(int c, void *context)
     return -1;
   if (xml_set_node_data(xml->node, xml->data, &xml->mem))
     return -1;
-#if 0
-  dbg_show_node(xml->node, &xml->mem);
-#endif
   xml->last_node = xml->node;
   if (pop_node(&xml->node, &xml->data, &xml->mem, &xml->stack)
       || xml->node == POOL_NIL)
