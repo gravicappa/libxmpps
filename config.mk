@@ -1,2 +1,2 @@
-CC = tcc
-CFLAGS = -O0 -g -Wall
+CC = gcc
+CFLAGS = -O0 -g
