@@ -157,6 +157,14 @@ xml_init(struct xml *xml)
 }
 
 void
+xml_reset(struct xml *xml)
+{
+  xml->state = xml->level = 0;
+  pool_clean(&xml->mem);
+  pool_clean(&xml->stack);
+}
+
+void
 xml_clean(struct xml *xml)
 {
   if (!xml)
@@ -165,8 +173,7 @@ xml_clean(struct xml *xml)
     free(xml->fsm);
     xml->fsm = 0;
   }
-  pool_clean(&xml->mem);
-  pool_clean(&xml->stack);
+  xml_reset(xml);
 }
 
 int
