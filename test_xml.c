@@ -29,7 +29,8 @@ test_xml()
         id = pool_ptr(&xml.mem, xml.node_id);
         fprintf(stderr, "started '%s'\n", id);
         if (id && (!strcmp(id, "stream") || !strcmp(id, "stream:stream"))) {
-          fprintf(stderr, "\nSTREAM started\n");
+          fprintf(stderr, "\nSTREAM started\n%s\n\n",
+                  str_from_xml_node(&mem, xml.node, &xml.mem));
         }
       }
       break;
@@ -66,11 +67,30 @@ test_printf()
   pool_clean(&mem);
 }
 
+void
+test_make_xml()
+{
+  struct pool mem = { 4096 };
+  int x;
+
+  x = xml_new("some_tag", &mem);
+  xml_node_add_text(x, "Data data data.", &mem);
+  xml_node_add_attr(x, "attr", "567", &mem);
+  xml_node_add_text(x, " More data.", &mem);
+  xml_node_add_attr(x, "alpha", "α='1.3'", &mem);
+  xml_node_add_attr(x, "beta", "β='2.3'", &mem);
+  xml_insert(x, "inside", &mem);
+
+  fprintf(stderr, "\nNODE\n%s\n\n", str_from_xml_node(&mem, x, &mem));
+  pool_clean(&mem);
+}
+
 int
 main()
 {
   //test_xml();
-  test_printf();
+  //test_printf();
+  test_make_xml();
   return 0;
 }
 
