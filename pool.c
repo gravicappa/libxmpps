@@ -108,7 +108,7 @@ pool_append_strn(struct pool *p, int h, const char *str, int len)
 int
 pool_append_str(struct pool *p, int h, const char *str)
 {
-  return pool_append_strn(p, h, str, strlen(str));
+  return pool_append_strn(p, h, str, str ? strlen(str) : 0);
 }
 
 int
