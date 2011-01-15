@@ -1,11 +1,12 @@
 name = libxmpp
 TARG = $name.a
 CC = pcc
-CFLAGS = -O0 -g -Wall -pedantic
 O = o
 LIBFILES = xml.o fsm.o pool.o node.o xmpp.o md5.o base64.o
 
 < config.mk
+
+CFLAGS = $CFLAGS -O0 -g -Wall -pedantic
 
 default:V: sjc
 

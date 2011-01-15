@@ -1,2 +1,5 @@
+SJC_VERSION = 0.1
+
 CC = gcc
-CFLAGS = -O0 -g
+CFLAGS = -O0 -g -DSJC_VERSION=\"$SJC_VERSION\"
+
