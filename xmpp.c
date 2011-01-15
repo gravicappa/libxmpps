@@ -30,17 +30,25 @@ int xmpp_escape_str(int dst_bytes, char *dst, const char *src);
 int
 xmpp_init(struct xmpp *xmpp, int stack_size)
 {
-  memset(xmpp, 0, sizeof(*xmpp));
-  xmpp->xml.mem.dsize = stack_size;
-  xmpp->xml.stack.dsize = stack_size;
-  if (xml_init(&xmpp->xml))
-    return 1;
-  xmpp->mem.dsize = stack_size;
-  xmpp->state = 0;
-  xmpp->node_fn = 0;
-  xmpp->stream_fn = 0;
-  xmpp->error_fn = 0;
-  return 0;
+  int len;
+  char *s;
+
+  if (!xmpp->server[0]) {
+    s = jid_server(xmpp->jid, &len);
+    if (!s || !len || len > sizeof(xmpp->server) - 1)
+      return -1;
+    memcpy(xmpp->server, s, len);
+    xmpp->server[len] = 0;
+  }
+  if (!xmpp->user[0]) {
+    s = jid_name(xmpp->jid, &len);
+    if (!s || !len || len > sizeof(xmpp->user) - 1)
+      return -1;
+    memcpy(xmpp->user, s, len);
+    xmpp->user[len] = 0;
+  }
+  xmpp->mem.dsize = xmpp->xml.mem.dsize = xmpp->xml.stack.dsize = stack_size;
+  return xml_init(&xmpp->xml);
 }
 
 void
@@ -118,42 +126,19 @@ xmpp_send_node(int node, struct xmpp *xmpp)
 }
 
 int
-xmpp_start_stream(const char *to, struct xmpp *xmpp)
+xmpp_start(struct xmpp *xmpp)
 {
   int mark, h, n, ret = -1;
   char *s;
 
   mark = pool_state(&xmpp->mem);
-  h = xml_printf(&xmpp->mem, POOL_NIL, xmpp_head_fmt, to);
+  h = xml_printf(&xmpp->mem, POOL_NIL, xmpp_head_fmt, xmpp->server);
   s = pool_ptr(&xmpp->mem, h);
   n = strlen(s);
   if (s && (xmpp->io->send(n, s, xmpp->io) == n))
     ret = 0;
   pool_restore(&xmpp->mem, mark);
   return ret;
-}
-
-int
-xmpp_start(struct xmpp *xmpp)
-{
-  int len;
-  char *s;
-
-  if (!xmpp->server[0]) {
-    s = jid_server(xmpp->jid, &len);
-    if (!s || !len || len > sizeof(xmpp->server) - 1)
-      return -1;
-    memcpy(xmpp->server, s, len);
-    xmpp->server[len] = 0;
-  }
-  if (!xmpp->user[0]) {
-    s = jid_name(xmpp->jid, &len);
-    if (!s || !len || len > sizeof(xmpp->user) - 1)
-      return -1;
-    memcpy(xmpp->user, s, len);
-    xmpp->user[len] = 0;
-  }
-  return xmpp_start_stream(xmpp->server, xmpp);
 }
 
 int
@@ -213,12 +198,6 @@ xmpp_starttls(struct xmpp *xmpp)
 {
   const char *s = "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>";
   return xmpp->io->send(strlen(s), s, xmpp->io);
-}
-
-int
-xmpp_stream_hook(int node, struct xmpp *xmpp)
-{
-  return 0;
 }
 
 static char *
@@ -414,7 +393,7 @@ xmpp_default_node_hook(int node, struct xmpp *xmpp, void *user)
     } else if (!strcmp(id, "success")) {
       xmpp->is_authorized = 1;
       xml_reset(&xmpp->xml);
-      return (xmpp_start_stream(xmpp->server, xmpp) == 0) ? 1 : -1;
+      return (xmpp_start(xmpp) == 0) ? 1 : -1;
     }
   }
   return 0;

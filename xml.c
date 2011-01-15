@@ -151,9 +151,7 @@ xml_init(struct xml *xml)
   xml->text = POOL_NIL;
   xml->level = xml->state = xml->text_ent_len = 0;
   xml->fsm = make_fsm(xml_rules);
-  if (!xml->fsm)
-    return -1;
-  return 0;
+  return (xml->fsm == 0) ? -1 : 0;
 }
 
 void

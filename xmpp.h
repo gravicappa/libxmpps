@@ -1,4 +1,5 @@
 #define XMPP_BUF_BYTES 256
+#define XMPP_PORT 5222
 
 #define XMPP_SASL_PLAIN 1
 #define XMPP_SASL_MD5 2
@@ -19,9 +20,9 @@ struct io {
 };
 
 struct xmpp {
+  struct io *io;
   struct xml xml;
   struct pool mem;
-  struct io *io;
 
   enum xmpp_state state;
 
