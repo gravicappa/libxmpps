@@ -290,9 +290,11 @@ process_input(int fd, struct xmpp *xmpp)
       if (!buf[2])
         break;
       p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, buf + 3);
+      break;
 
     default:
-      p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, buf);
+      if (to[0])
+        p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, buf);
     }
   }
   if (p)
