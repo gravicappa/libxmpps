@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <ctype.h>
 #include "pool.h"
 #include "node.h"
@@ -122,18 +123,8 @@ xmpp_send_node(int node, struct xmpp *xmpp)
 int
 xmpp_start(struct xmpp *xmpp)
 {
-  int mark, h, n, ret = -1;
-  char *s;
-
   xml_reset(&xmpp->xml);
-  mark = pool_state(&xmpp->mem);
-  h = xml_printf(&xmpp->mem, POOL_NIL, xmpp_head_fmt, xmpp->server);
-  s = pool_ptr(&xmpp->mem, h);
-  n = strlen(s);
-  if (s && (xmpp->send(n, s, xmpp->io_context) == n))
-    ret = 0;
-  pool_restore(&xmpp->mem, mark);
-  return ret;
+  return xmpp_printf(xmpp, xmpp_head_fmt, xmpp->server);
 }
 
 int
@@ -570,4 +561,23 @@ jid_resource(char *jid, int *len)
   jid += n + 1;
   *len = strlen(jid);
   return jid;
+}
+
+int
+xmpp_printf(struct xmpp *xmpp, const char *fmt, ...)
+{
+  int mark, len, ret = -1;
+  char *s;
+  va_list args;
+
+  va_start(args, fmt);
+  mark = pool_state(&xmpp->mem);
+  s = pool_ptr(&xmpp->mem, xml_printfv(&xmpp->mem, POOL_NIL, fmt, args));
+  if (s) {
+    len = strlen(s);
+    ret = (xmpp->send(strlen(s), s, xmpp->io_context) == len) ? 0 : -1;
+  }
+  pool_restore(&xmpp->mem, mark);
+  va_end(args);
+  return ret;
 }

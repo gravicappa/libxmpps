@@ -252,19 +252,16 @@ int
 process_input(int fd, struct xmpp *xmpp)
 {
   char buf[BUF_BYTES];
-  char *s, *p = 0;
+  char *s;
   char *pres = "<presence><show>%s</show><status>%s</status></presence>";
   char *msg = "<message to='%s'><body>%s</body></message>";
   static const char *show[2] = { "online", "away" };
-  int mark;
 
   if (read_line(fd, sizeof(buf), buf))
     return -1;
 
-  mark = pool_state(&xmpp->mem);
-
   if (buf[0] != ':')
-    p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, buf);
+    xmpp_printf(xmpp, msg, to, buf);
   else {
     switch (buf[1]) {
     case 'a':
@@ -272,8 +269,7 @@ process_input(int fd, struct xmpp *xmpp)
       if (buf[2])
         snprintf(status_msg[status], sizeof(status_msg[status]), "%s",
                  buf + 3);
-      p = xml_sprintf(&xmpp->mem, POOL_NIL, pres, show[status],
-                      status_msg[status]);
+      xmpp_printf(xmpp, pres, show[status], status_msg[status]);
       break;
 
     case 'm':
@@ -282,24 +278,21 @@ process_input(int fd, struct xmpp *xmpp)
         break;
       *s++ = 0;
       snprintf(to, sizeof(to), "%s", buf + 3);
-      p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, s);
+      xmpp_printf(xmpp, msg, to, s);
       break;
 
     case 'r':
       memcpy(to, from, sizeof(to));
       if (!buf[2])
         break;
-      p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, buf + 3);
+      xmpp_printf(xmpp, msg, to, buf + 3);
       break;
 
     default:
       if (to[0])
-        p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, buf);
+        xmpp_printf(xmpp, msg, to, buf);
     }
   }
-  if (p)
-    io_send(strlen(p), p, &fd);
-  pool_restore(&xmpp->mem, mark);
   return 0;
 }
 

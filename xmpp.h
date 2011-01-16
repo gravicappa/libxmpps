@@ -49,6 +49,7 @@ void xmpp_clean(struct xmpp *xmpp);
 int xmpp_process_input(int bytes, const char *buf, struct xmpp *xmpp, 
                        void *user);
 int xmpp_send_node(int node, struct xmpp *xmpp);
+int xmpp_printf(struct xmpp *xmpp, const char *fmt, ...);
 int xmpp_default_node_hook(int node, struct xmpp *xmpp, void *user);
 int xmpp_start(struct xmpp *xmpp);
 int xmpp_starttls(struct xmpp *xmpp);
