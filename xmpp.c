@@ -104,15 +104,9 @@ xmpp_process_input(int bytes, const char *buf, struct xmpp *xmpp, void *user)
 }
 
 int
-xmpp_send_raw(int bytes, char *buf, struct xmpp *xmpp)
-{
-  return (xmpp->send(bytes, buf, xmpp->io_context) == bytes) ? 0 : -1;
-}
-
-int
 xmpp_send_node(int node, struct xmpp *xmpp)
 {
-  int mark, bytes, ret = -1;
+  int mark, bytes = 0, ret = -1;
   char *s;
 
   mark = pool_state(&xmpp->mem);
@@ -281,7 +275,7 @@ xmpp_make_sasl_response(char *msg, struct xmpp *xmpp)
   char *realm, *nonce, *realm_end, *nonce_end, *resp;
   char cnonce[SASL_CNONCE_LEN * 8 + 1], md5sum[33];
   char user[XMPP_BUF_BYTES], pwd[XMPP_BUF_BYTES];
-  int i, t, d, len, slen, x;
+  int i, d, len, slen, x;
 
   realm = get_digest(msg, "realm=\"", '"', &realm_end);
   nonce = get_digest(msg, "nonce=\"", '"', &nonce_end);
@@ -305,12 +299,11 @@ xmpp_make_sasl_response(char *msg, struct xmpp *xmpp)
   if (sasl_md5(md5sum, realm, nonce, cnonce, user, pwd, xmpp->server))
     return POOL_NIL;
 
-  t = xml_printf(&xmpp->mem, POOL_NIL,
-                 "username=\"%S\",realm=\"%S\",nonce=\"%S\",cnonce=\"%S\","
-                 "nc=00000001,qop=auth,digest-uri=\"xmpp/%S\",response=%S,"
-                 "charset=utf-8",
-                 user, realm, nonce, cnonce, xmpp->server, md5sum);
-  resp = pool_ptr(&xmpp->mem, t);
+  resp = xml_sprintf(&xmpp->mem, POOL_NIL,
+                     "username=\"%S\",realm=\"%S\",nonce=\"%S\","
+                     "cnonce=\"%S\",nc=00000001,qop=auth,"
+                     "digest-uri=\"xmpp/%S\",response=%S,charset=utf-8",
+                     user, realm, nonce, cnonce, xmpp->server, md5sum);
   if (!resp)
     return POOL_NIL;
   slen = strlen(resp);

@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "pool.h"
 #include "node.h"
 #include "xml.h"
@@ -11,7 +13,7 @@ test_xml()
 {
   struct xml xml = { {4096}, {4096} };
   struct pool mem = { 4096 };
-  int n, c;
+  int c;
   char *id;
 
   if (xml_init(&xml))
@@ -58,12 +60,12 @@ void
 test_printf()
 {
   struct pool mem = { 4096 };
-  int h;
+  char *s;
 
-  h = xml_printf(&mem, POOL_NIL, "<%S attr='%s' id='%s_%d'>%s</%S>", "one",
-                 "two\"three'four", "session", 167, "five<six>seven'eight'",
-                 "one");
-  fprintf(stderr, "h: '%s'\n", pool_ptr(&mem, h));
+  s = xml_sprintf(&mem, POOL_NIL, "<%S attr='%s' id='%s_%d'>%s</%S>", "one",
+                  "two\"three'four", "session", 167, "five<six>seven'eight'",
+                  "one");
+  fprintf(stderr, "h: '%s'\n", s);
   pool_clean(&mem);
 }
 
@@ -88,9 +90,12 @@ test_make_xml()
 int
 main()
 {
-  //test_xml();
-  //test_printf();
-  test_make_xml();
+  if (1)
+    test_xml();
+  if (1)
+    test_printf();
+  if (1)
+    test_make_xml();
   return 0;
 }
 

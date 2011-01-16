@@ -264,7 +264,7 @@ process_input(int fd, struct xmpp *xmpp)
   mark = pool_state(&xmpp->mem);
 
   if (buf[0] != ':')
-    p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to, buf));
+    p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, buf);
   else {
     switch (buf[1]) {
     case 'a':
@@ -272,9 +272,8 @@ process_input(int fd, struct xmpp *xmpp)
       if (buf[2])
         snprintf(status_msg[status], sizeof(status_msg[status]), "%s",
                  buf + 3);
-      p = pool_ptr(&xmpp->mem,
-                   xml_printf(&xmpp->mem, POOL_NIL, pres, show[status],
-                              status_msg[status]));
+      p = xml_sprintf(&xmpp->mem, POOL_NIL, pres, show[status],
+                      status_msg[status]);
       break;
 
     case 'm':
@@ -283,19 +282,17 @@ process_input(int fd, struct xmpp *xmpp)
         break;
       *s++ = 0;
       snprintf(to, sizeof(to), "%s", buf + 3);
-      p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to, s));
+      p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, s);
       break;
 
     case 'r':
       memcpy(to, from, sizeof(to));
       if (!buf[2])
         break;
-      p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to,
-                                          buf + 3));
+      p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, buf + 3);
 
     default:
-      p = pool_ptr(&xmpp->mem,
-                   xml_printf(&xmpp->mem, POOL_NIL, msg, to, buf));
+      p = xml_sprintf(&xmpp->mem, POOL_NIL, msg, to, buf);
     }
   }
   if (p)

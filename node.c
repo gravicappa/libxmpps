@@ -32,14 +32,12 @@ xml_append_esc(struct pool *pool, int h, const char *str)
 }
 
 int
-xml_printf(struct pool *pool, int h, const char *fmt, ...)
+xml_printfv(struct pool *pool, int h, const char *fmt, va_list args)
 {
-  va_list args;
   int mark, n;
   char buf[32];
-  const char *prev, *s;
+  const char *prev, *s, *arg;
 
-  va_start(args, fmt);
   mark = pool_state(pool);
   n = strlen(fmt);
   prev = fmt;
@@ -56,10 +54,12 @@ xml_printf(struct pool *pool, int h, const char *fmt, ...)
       h = pool_append_char(pool, h, (char)va_arg(args, int));
       break;
     case 's':
-      h = xml_append_esc(pool, h, va_arg(args, const char *));
+      arg = va_arg(args, const char *);
+      h = (arg) ? xml_append_esc(pool, h, arg) : POOL_NIL;
       break;
     case 'S':
-      h = pool_append_str(pool, h, va_arg(args, const char *));
+      arg = va_arg(args, const char *);
+      h = (arg) ? pool_append_str(pool, h, arg) : POOL_NIL;
       break;
     case 'd':
       snprintf(buf, sizeof(buf), "%d", va_arg(args, int));
@@ -70,6 +70,7 @@ xml_printf(struct pool *pool, int h, const char *fmt, ...)
       h = pool_append_str(pool, h, buf);
       break;
     case '%':
+      h = pool_append_char(pool, h, '%');
       break;
     default:
       h = POOL_NIL;
@@ -81,8 +82,29 @@ xml_printf(struct pool *pool, int h, const char *fmt, ...)
   h = pool_append_str(pool, h, prev);
   if (h == POOL_NIL)
     pool_restore(pool, mark);
-  va_end(args);
   return h;
+}
+
+int
+xml_printf(struct pool *pool, int h, const char *fmt, ...)
+{
+  int ret;
+  va_list args;
+  va_start(args, fmt);
+  ret = xml_printfv(pool, h, fmt, args);
+  va_end(args);
+  return ret;
+}
+
+char *
+xml_sprintf(struct pool *pool, int h, const char *fmt, ...)
+{
+  char *ret;
+  va_list args;
+  va_start(args, fmt);
+  ret = pool_ptr(pool, xml_printfv(pool, h, fmt, args));
+  va_end(args);
+  return ret;
 }
 
 static int
@@ -262,18 +284,6 @@ xml_node_add_textn(int node, int len, const char *text, struct pool *p)
 }
 
 int
-xml_set_node_data(int node, int datalist, struct pool *p)
-{
-  struct xml_node *n;
-
-  n = (struct xml_node *)pool_ptr(p, node);
-  if (!n)
-    return 1;
-  n->data = reverse_datalist(datalist, p);
-  return 0;
-}
-
-int
 xml_add_data(int x, enum xml_type type, int list, struct pool *p)
 {
   int h;
@@ -373,18 +383,12 @@ h_from_xml_node(int h, struct pool *pool, int node, struct pool *nodepool)
   if (!n)
     return POOL_NIL;
 
-  h = pool_append_str(pool, h, "<");
-  h = pool_append_str(pool, h, pool_ptr(nodepool, n->name));
+  h = xml_printf(pool, h, "<%S", pool_ptr(nodepool, n->name));
   for (a = (struct xml_attr *)pool_ptr(nodepool, n->attr);
        a;
-       a = (struct xml_attr *)pool_ptr(nodepool, a->next)) {
-      h = pool_append_str(pool, h, " ");
-      h = pool_append_str(pool, h, pool_ptr(nodepool, a->name));
-      h = pool_append_str(pool, h, "=");
-      h = pool_append_char(pool, h, '\'');
-      h = xml_append_esc(pool, h, pool_ptr(nodepool, a->value));
-      h = pool_append_char(pool, h, '\'');
-    }
+       a = (struct xml_attr *)pool_ptr(nodepool, a->next))
+    h = xml_printf(pool, h, " %S='%s'", pool_ptr(nodepool, a->name),
+                   pool_ptr(nodepool, a->value));
   d = (struct xml_data *)pool_ptr(nodepool, n->data);
   if (d) {
     h = pool_append_str(pool, h, ">");
@@ -397,9 +401,7 @@ h_from_xml_node(int h, struct pool *pool, int node, struct pool *nodepool)
         h = xml_append_esc(pool, h, pool_ptr(nodepool, d->value));
         break;
       }
-    h = pool_append_str(pool, h, "</");
-    h = pool_append_str(pool, h, pool_ptr(nodepool, n->name));
-    h = pool_append_str(pool, h, ">");
+    h = xml_printf(pool, h, "</%S>", pool_ptr(nodepool, n->name));
   } else
     h = pool_append_str(pool, h, "/>");
 

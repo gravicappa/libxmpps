@@ -364,8 +364,7 @@ node_tail_end(int c, void *context)
 #endif
   if (!sid || !sname || strcmp(sid, sname) != 0)
     return -1;
-  if (xml_set_node_data(xml->node, xml->data, &xml->mem))
-    return -1;
+  node->data = reverse_datalist(xml->data, &xml->mem);
   xml->last_node = xml->node;
   if (pop_node(&xml->node, &xml->data, &xml->mem, &xml->stack)
       || xml->node == POOL_NIL)
