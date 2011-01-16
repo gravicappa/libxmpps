@@ -4,13 +4,6 @@
 
 #include "tls.h"
 
-static void
-my_debug(void *ctx, int level, const char *str)
-{
-  if (level < 4)
-    fprintf(stderr, "tls dbg[%d]: %s\n", level, str);
-}
-
 static int
 io_send(void *user, unsigned char *buf, int len)
 {
@@ -51,9 +44,6 @@ tls_start(struct tls *tls)
   ssl_set_authmode(&tls->ssl, SSL_VERIFY_NONE);
 
   ssl_set_rng(&tls->ssl, havege_rand, &tls->hs);
-#if 0
-  ssl_set_dbg(&tls->ssl, my_debug, stderr);
-#endif
   ssl_set_bio(&tls->ssl, io_recv, tls, io_send, tls);
 
   ssl_set_ciphers(&tls->ssl, ssl_default_ciphers);
