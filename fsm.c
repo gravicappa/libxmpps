@@ -1,24 +1,5 @@
-#include <ctype.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include "fsm.h"
-
-static void
-fsm_print_rule(FILE *out, struct fsm_rule *r)
-{
-  fprintf(out, "rule %d", r->state);
-  if (r->pred == fsm_char)
-    fprintf(out, " c: '%c'", r->in);
-  else if (r->pred == fsm_true)
-    fprintf(out, " true");
-  else if (r->pred == isalpha)
-    fprintf(out, " isalpha");
-  else if (r->pred == isspace)
-    fprintf(out, " isspace");
-  else if (r->pred == isalnum)
-    fprintf(out, " isalnum");
-  fprintf(out, " to: %d\n", r->next);
-}
 
 int
 fsm_run(struct fsm *fsm, int in, int state, void *context)
@@ -33,16 +14,8 @@ fsm_run(struct fsm *fsm, int in, int state, void *context)
     pr = fsm->states[state].rules;
     n = fsm->states[state].nrules;
     state = -1;
-    for (i = 0; i < n; i++, pr++) {
-#if 0
-      fprintf(stderr, ";; checking in: '%c' ", in);
-      fsm_print_rule(stderr, pr);
-#endif
+    for (i = 0; i < n; i++, pr++)
       if ((pr->pred == fsm_char && pr->in == in) || pr->pred(in)) {
-#if 0
-        fprintf(stderr, ";; matched in: '%c' ", in);
-        fsm_print_rule(stderr, pr);
-#endif
         state = pr->next;
         r = pr->fn ? pr->fn(in, context) : 0;
         if (r > 0)
@@ -51,7 +24,6 @@ fsm_run(struct fsm *fsm, int in, int state, void *context)
           return FSM_ERROR;
         return pr->next;
       }
-    }
   }
   return FSM_ERROR;
 }
@@ -60,12 +32,9 @@ struct fsm *
 make_fsm(struct fsm_rule *rules)
 {
   struct fsm *fsm;
-  int i, j, nrules, nstates, prev, m;
   struct fsm_state *ps;
-  struct fsm_rule *pr;
+  int i, j, prev = -1, nstates = 0;
 
-  prev = -1;
-  nrules = nstates = 0;
   for (i = 0; rules[i].pred; i++) {
     if (nstates < rules[i].state)
       nstates = rules[i].state;
@@ -74,7 +43,6 @@ make_fsm(struct fsm_rule *rules)
     prev = rules[i].state;
   }
   nstates++;
-  nrules = i;
 
   fsm = (struct fsm *)malloc(sizeof(struct fsm) 
                              + sizeof(struct fsm_state) * nstates);
@@ -82,35 +50,19 @@ make_fsm(struct fsm_rule *rules)
     return 0;
 
   fsm->nstates = nstates;
-  fsm->states = (struct fsm_state *)(fsm + 1);
+  ps = fsm->states = (struct fsm_state *)(fsm + 1);
 
-  ps = fsm->states;
   for (i = 0; i < nstates; i++, ps++) {
-    m = 0;
-    pr = 0;
+    ps->nrules = 0;
+    ps->rules = 0;
     for (j = 0; rules[j].pred; j++)
       if (rules[j].state == i) {
-        m++;
-        if (!pr)
-          pr = &rules[j];
+        ps->nrules++;
+        if (!ps->rules)
+          ps->rules = &rules[j];
       }
-    ps->nrules = m;
-    ps->rules = pr;
   }
   return fsm;
-}
-
-void
-print_fsm(struct fsm *fsm)
-{
-  struct fsm_state *s;
-  int i;
-
-  fprintf(stderr, "fsm states: %d\n", fsm->nstates);
-  for (i = 0, s = fsm->states; i < fsm->nstates; i++, s++) {
-    fprintf(stderr, "state: %d rules: %d\n", i, s->nrules);
-  }
-  fprintf(stderr, "end fsm\n");
 }
 
 int
