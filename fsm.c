@@ -7,10 +7,7 @@ fsm_run(struct fsm *fsm, int in, int state, void *context)
   int i, n, r;
   struct fsm_rule *pr;
 
-  if (state < 0 || state >= fsm->nstates)
-    return FSM_ERROR;
-
-  while (state >= 0) {
+  while (state >= 0 && state < fsm->nstates) {
     pr = fsm->states[state].rules;
     n = fsm->states[state].nrules;
     state = -1;
