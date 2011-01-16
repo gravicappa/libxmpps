@@ -20,7 +20,7 @@ run_xmpp_test:V: test_xmpp
 run_xml_test:V: test_xml
 	rm -f core
   ulimit -c 65536
-  ./test_xml < test/xmpp1.xml
+  ./test_xml < test/in.xmpp.xml
   ulimit -c 0
 
 clean:V:
