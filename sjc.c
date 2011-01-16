@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -34,6 +35,9 @@ static char status_msg[2][BUF_BYTES] = {"", "Away."};
 static char to[BUF_BYTES] = "";
 static char from[BUF_BYTES] = "";
 
+static char *x_roster = "<iq type='get' id='roster'>"
+                        "<query xmlns='jabber:iq:roster'/></iq>";
+
 static struct tls tls;
 static int in_tls = 0;
 
@@ -58,15 +62,6 @@ tcp_connect(char *host, int port)
     return -1;
   }
   return fd;
-}
-
-int
-net_blocking(int fd, int blocking)
-{
-  if (blocking)
-    return fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
-  else 
-    return fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
 }
 
 static int
@@ -124,7 +119,6 @@ io_send(int bytes, const char *buf, void *user)
         fprintf(stderr, "\n\n");
         break;
       }
-
   return (in_tls) ? tls_send(bytes, buf, &tls) : tcp_send(bytes, buf, user);
 }
 
@@ -139,8 +133,9 @@ node_from(int x, int *len, struct xmpp *xmpp)
 static int
 auth_handler(int x, void *user)
 {
-  char *p = "<presence><show/></presence>";
-  io_send(strlen(p), p, &fd);
+  struct xmpp *xmpp = (struct xmpp *)user;
+  xmpp_printf(xmpp, "<presence><show/></presence>");
+  xmpp_printf(xmpp, x_roster);
   return 0;
 }
 
@@ -168,14 +163,44 @@ stream_handler(int x, void *user)
   return 0;
 }
 
+static void
+print_msg(const char *fmt, ...)
+{
+  char date[BUF_BYTES];
+  time_t t;
+  va_list args;
+  va_start(args, fmt);
+  t = time(0);
+  strftime(date, sizeof(date), "%Y-%m-%d %H:%M", localtime(&t));
+  printf("%s ", date);
+  vprintf(fmt, args);
+  va_end(args);
+}
+
+static void
+roster_handler(int x, struct xmpp *xmpp)
+{
+  struct xml_data *d;
+  char *jid, *name, *sub;
+  for (d = xml_node_data(xml_node_find(x, "query", &xmpp->xml.mem),
+                         &xmpp->xml.mem);
+       d; d = xml_data_next(d, &xmpp->xml.mem)) {
+    if (d->type != XML_NODE)
+      continue;
+    jid = xml_node_find_attr(d->value, "jid", &xmpp->xml.mem);
+    name = xml_node_find_attr(d->value, "name", &xmpp->xml.mem);
+    sub = xml_node_find_attr(d->value, "subscription", &xmpp->xml.mem);
+    print_msg("* %s - %s - [%s]\n", name, jid, sub);
+  }
+  print_msg("End of roster\n");
+}
+
 static int
 node_handler(int x, void *user)
 {
   struct xmpp *xmpp = (struct xmpp *)user;
-  char *name, *msg, *msg_from, *show, *status;
+  char *name, *msg, *msg_from, *show, *status, *type;
   int r, n, ret = 0;
-  char date[BUF_BYTES];
-  time_t t;
 
   r = xmpp_default_node_hook(x, xmpp, user);
   if (r < 0)
@@ -195,13 +220,8 @@ node_handler(int x, void *user)
                         &xmpp->xml.mem);
     if (!msg)
       return -1;
-    t = time(0);
-    strftime(date, sizeof(date), "%Y-%m-%d %H:%M", localtime(&t));
-    fwrite(date, 1, strlen(date), stdout);
-    fwrite(" ", 1, 1, stdout);
-    fwrite(msg_from, 1, n, stdout);
-    printf(": %s\n", msg);
-  } else if (!strcmp(name, "presense")) {
+    print_msg("%.*s: %s\n", n, msg_from, msg);
+  } else if (!strcmp(name, "presence")) {
     msg_from = node_from(x, &n, xmpp);
     if (!msg_from)
       return -1;
@@ -209,12 +229,15 @@ node_handler(int x, void *user)
                          &xmpp->xml.mem);
     status = xml_node_text(xml_node_find(x, "status", &xmpp->xml.mem),
                            &xmpp->xml.mem);
-    t = time(0);
-    strftime(date, sizeof(date), "%Y-%m-%d %H:%M", localtime(&t));
-    fwrite(date, 1, strlen(date), stdout);
-    fwrite(" ", 1, n, stdout);
-    fwrite(msg_from, 1, n, stdout);
-    printf(" is %s '%s'\n", show ? show : "online", status ? status : "");
+    type = xml_node_find_attr(x, "type", &xmpp->xml.mem);
+    if (type)
+      print_msg("-!- %.*s sends %s\n", n, msg_from, type);
+    print_msg("-!- %.*s is %s (%s)\n", n, msg_from, show ? show : "online",
+              status ? status : "");
+  } else if (!strcmp(name, "iq")) {
+    name = xml_node_find_attr(x, "id", &xmpp->xml.mem);
+    if (name && !strcmp(name, "roster"))
+      roster_handler(x, xmpp);
   }
   return ret;
 }
@@ -271,7 +294,6 @@ process_input(int fd, struct xmpp *xmpp)
                  buf + 3);
       xmpp_printf(xmpp, pres, show[status], status_msg[status]);
       break;
-
     case 'm':
       s = strchr(buf + 3, ' ');
       if (!s)
@@ -280,14 +302,14 @@ process_input(int fd, struct xmpp *xmpp)
       snprintf(to, sizeof(to), "%s", buf + 3);
       xmpp_printf(xmpp, msg, to, s);
       break;
-
     case 'r':
       memcpy(to, from, sizeof(to));
       if (!buf[2])
         break;
       xmpp_printf(xmpp, msg, to, buf + 3);
       break;
-
+    case 'w': xmpp_printf(xmpp, x_roster); break;
+    case '<': xmpp_printf(xmpp, "%s", buf + 3); break;
     default:
       if (to[0])
         xmpp_printf(xmpp, msg, to, buf);
@@ -304,7 +326,7 @@ process_connection(int fd, struct xmpp *xmpp)
   int max_fd, ret = 0;
   int keep_alive_ms = 25000;
 
-  net_blocking(fd, 0);
+  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
   while (1) {
     FD_ZERO(&fds);
     FD_SET(fd, &fds);
@@ -334,7 +356,7 @@ die_usage(void)
   fprintf(stderr, "%s",
           "sjc - simple jabber client - " SJC_VERSION "\n"
           "(C)opyright 2010 Ramil Farkhshatov\n"
-          "usage: sjc [-j <jid>] [-s <server>] [-p <port>] [-k <pwdfile>]\n");
+          "usage: sjc [-j jid] [-s server] [-p port] [-k pwdfile]\n");
   exit(1);
 }
 
