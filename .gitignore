@@ -1,3 +1,4 @@
 *.o
 core
-test_xml
+sjc
+test_*[^c]
