@@ -106,7 +106,7 @@ xmpp_process_input(int bytes, const char *buf, struct xmpp *xmpp, void *user)
 int
 xmpp_send_raw(int bytes, char *buf, struct xmpp *xmpp)
 {
-  return (xmpp->io->send(bytes, buf, xmpp->io) == bytes) ? 0 : -1;
+  return (xmpp->send(bytes, buf, xmpp->io_context) == bytes) ? 0 : -1;
 }
 
 int
@@ -119,7 +119,7 @@ xmpp_send_node(int node, struct xmpp *xmpp)
   s = str_from_xml_node(&xmpp->mem, node, &xmpp->mem);
   if (s) {
     bytes = pool_state(&xmpp->mem) - mark - 1;
-    ret = xmpp->io->send(bytes, s, xmpp->io);
+    ret = xmpp->send(bytes, s, xmpp->io_context);
   }
   pool_restore(&xmpp->mem, mark);
   return (ret == bytes) ? 0 : -1;
@@ -131,11 +131,12 @@ xmpp_start(struct xmpp *xmpp)
   int mark, h, n, ret = -1;
   char *s;
 
+  xml_reset(&xmpp->xml);
   mark = pool_state(&xmpp->mem);
   h = xml_printf(&xmpp->mem, POOL_NIL, xmpp_head_fmt, xmpp->server);
   s = pool_ptr(&xmpp->mem, h);
   n = strlen(s);
-  if (s && (xmpp->io->send(n, s, xmpp->io) == n))
+  if (s && (xmpp->send(n, s, xmpp->io_context) == n))
     ret = 0;
   pool_restore(&xmpp->mem, mark);
   return ret;
@@ -197,7 +198,9 @@ int
 xmpp_starttls(struct xmpp *xmpp)
 {
   const char *s = "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>";
-  return xmpp->io->send(strlen(s), s, xmpp->io);
+  int n = strlen(s);
+  xmpp->state = XMPP_STATE_TRY_TLS;
+  return (xmpp->send(n, s, xmpp->io_context) == n) ? 0 : -1;
 }
 
 static char *
@@ -236,38 +239,38 @@ sasl_md5(char md5sum[33], char *realm, char *nonce, char *cnonce,
   char a1s[33], a2s[33];
   const char auth[] = "AUTHENTICATE:xmpp/";
 
-  md5_init(&md5);
-  md5_append(&md5, (md5_byte_t *)user, strlen(user));
-  md5_append(&md5, (md5_byte_t *)":", 1);
-  md5_append(&md5, (md5_byte_t *)realm, strlen(realm));
-  md5_append(&md5, (md5_byte_t *)":", 1);
-  md5_append(&md5, (md5_byte_t *)pwd, strlen(pwd));
-  md5_finish(&md5, a1_h);
+  ae_md5_init(&md5);
+  ae_md5_append(&md5, (md5_byte_t *)user, strlen(user));
+  ae_md5_append(&md5, (md5_byte_t *)":", 1);
+  ae_md5_append(&md5, (md5_byte_t *)realm, strlen(realm));
+  ae_md5_append(&md5, (md5_byte_t *)":", 1);
+  ae_md5_append(&md5, (md5_byte_t *)pwd, strlen(pwd));
+  ae_md5_finish(&md5, a1_h);
 
-  md5_init(&md5);
-  md5_append(&md5, (md5_byte_t *)a1_h, 16);
-  md5_append(&md5, (md5_byte_t *)":", 1);
-  md5_append(&md5, (md5_byte_t *)nonce, strlen(nonce));
-  md5_append(&md5, (md5_byte_t *)":", 1);
-  md5_append(&md5, (md5_byte_t *)cnonce, strlen(cnonce));
-  md5_finish(&md5, a1);
+  ae_md5_init(&md5);
+  ae_md5_append(&md5, (md5_byte_t *)a1_h, 16);
+  ae_md5_append(&md5, (md5_byte_t *)":", 1);
+  ae_md5_append(&md5, (md5_byte_t *)nonce, strlen(nonce));
+  ae_md5_append(&md5, (md5_byte_t *)":", 1);
+  ae_md5_append(&md5, (md5_byte_t *)cnonce, strlen(cnonce));
+  ae_md5_finish(&md5, a1);
   hex_from_bin(sizeof(a1s), a1s, sizeof(a1), a1);
 
-  md5_init(&md5);
-  md5_append(&md5, (md5_byte_t *)auth, strlen(auth));
-  md5_append(&md5, (md5_byte_t *)server, strlen(server));
-  md5_finish(&md5, a2);
+  ae_md5_init(&md5);
+  ae_md5_append(&md5, (md5_byte_t *)auth, strlen(auth));
+  ae_md5_append(&md5, (md5_byte_t *)server, strlen(server));
+  ae_md5_finish(&md5, a2);
   hex_from_bin(sizeof(a2s), a2s, sizeof(a2), a2);
 
-  md5_init(&md5);
-  md5_append(&md5, (md5_byte_t *)a1s, 32);
-  md5_append(&md5, (md5_byte_t *)":", 1);
-  md5_append(&md5, (md5_byte_t *)nonce, strlen(nonce));
-  md5_append(&md5, (md5_byte_t *)":00000001:", 10);
-  md5_append(&md5, (md5_byte_t *)cnonce, strlen(cnonce));
-  md5_append(&md5, (md5_byte_t *)":auth:", 6);
-  md5_append(&md5, (md5_byte_t *)a2s, 32);
-  md5_finish(&md5, ret);
+  ae_md5_init(&md5);
+  ae_md5_append(&md5, (md5_byte_t *)a1s, 32);
+  ae_md5_append(&md5, (md5_byte_t *)":", 1);
+  ae_md5_append(&md5, (md5_byte_t *)nonce, strlen(nonce));
+  ae_md5_append(&md5, (md5_byte_t *)":00000001:", 10);
+  ae_md5_append(&md5, (md5_byte_t *)cnonce, strlen(cnonce));
+  ae_md5_append(&md5, (md5_byte_t *)":auth:", 6);
+  ae_md5_append(&md5, (md5_byte_t *)a2s, 32);
+  ae_md5_finish(&md5, ret);
   hex_from_bin(33, md5sum, sizeof(ret), ret);
   return 0;
 }
@@ -362,40 +365,45 @@ int
 xmpp_default_node_hook(int node, struct xmpp *xmpp, void *user)
 {
   char *id;
+
   id = xml_node_name(node, &xmpp->xml.mem);
   if (!id)
     return -1;
-  switch (xmpp->state) {
-  case XMPP_STATE_TLS:
+  if (xmpp->state == XMPP_STATE_TRY_TLS) {
     if (!strcmp(id, "proceed")) {
-      /* todo start tls on IO */
-      return 1;
+      fprintf(stderr, "tls_fn\n");
+      if (xmpp->tls_fn && xmpp->tls_fn(user)) {
+        fprintf(stderr, "tls_fn => !0\n");
+        return -1;
+      }
+      xmpp->state = XMPP_STATE_TLS;
+      fprintf(stderr, "tls_fn ok\n");
+      return (xmpp_start(xmpp) == 0) ? 1 : -1;
     } else if (!strcmp(id, "failure"))
       return -1;
-    break;
-
-  default:
-    if (!strcmp(id, "stream:features")) {
-      xmpp->features = xmpp_stream_features(node, &xmpp->xml.mem);
-      if (xmpp->is_authorized) {
-        if ((xmpp->features & XMPP_FEATURE_BIND) && xmpp_resource_bind(xmpp))
-          return -1;
-        if ((xmpp->features & XMPP_FEATURE_SESSION)
-            && xmpp_start_session(xmpp))
-          return -1;
-        if (xmpp->auth_fn && xmpp->auth_fn(node, user))
-          return -1;
-      } else if (xmpp->use_sasl)
-        return (xmpp_authorize(xmpp) == 0) ? 1 : -1;
-      return 1;
-    } else if (!strcmp(id, "challenge")) {
-      return (xmpp_sasl_challenge(node, xmpp) == 0) ? 1 : -1;
-    } else if (!strcmp(id, "success")) {
-      xmpp->is_authorized = 1;
-      xml_reset(&xmpp->xml);
-      return (xmpp_start(xmpp) == 0) ? 1 : -1;
-    }
   }
+  if (!strcmp(id, "stream:features")) {
+    if (xmpp->tls_fn && xmpp->state != XMPP_STATE_TLS)
+      return 1;
+    xmpp->features = xmpp_stream_features(node, &xmpp->xml.mem);
+    if (xmpp->is_authorized) {
+      if ((xmpp->features & XMPP_FEATURE_BIND) && xmpp_resource_bind(xmpp))
+        return -1;
+      if ((xmpp->features & XMPP_FEATURE_SESSION)
+          && xmpp_start_session(xmpp))
+        return -1;
+      if (xmpp->auth_fn && xmpp->auth_fn(node, user))
+        return -1;
+    } else if (xmpp->use_sasl)
+      return (xmpp_authorize(xmpp) == 0) ? 1 : -1;
+    return 1;
+  } else if (!strcmp(id, "challenge")) {
+    return (xmpp_sasl_challenge(node, xmpp) == 0) ? 1 : -1;
+  } else if (!strcmp(id, "success")) {
+    xmpp->is_authorized = 1;
+    return (xmpp_start(xmpp) == 0) ? 1 : -1;
+  } else if (!strcmp(id, "failure"))
+    return -1;
   return 0;
 }
 

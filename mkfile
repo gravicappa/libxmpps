@@ -37,7 +37,7 @@ test_xmpp: test_xmpp.$O $LIBFILES
 
 test_base64: test_base64.o base64.o
 
-sjc: sjc.$O $name.a
+sjc: sjc.$O tls.$O $name.a
 
 xml.$O: xml.c xml_states.h
 
@@ -60,7 +60,7 @@ xml_states.h: xml.c
   > $target
 
 %: %.$O
-  $CC $CFLAGS $LDFLAGS -o $target $prereq
+  $CC $CFLAGS -o $target $prereq $LDFLAGS 
 
 %.$O: %.c
   $CC $CFLAGS -c $stem.c -o $target

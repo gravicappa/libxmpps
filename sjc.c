@@ -9,20 +9,33 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <time.h>
+#include <errno.h>
+#ifdef USE_TLS
+#include <polarssl/ssl.h>
+#include <polarssl/havege.h>
+#endif/*USE_TLS*/
 
 #include "pool.h"
 #include "node.h"
 #include "xml.h"
 #include "xmpp.h"
 
+#ifdef USE_TLS
+#include "tls.h"
+#endif/*USE_TLS*/
+
 #define BUF_BYTES 512
 
 static int fd = -1;
 static int status = 0;
-static int show_log = 0;
+static int use_tls = 1;
+static int show_log = 1;
 static char status_msg[2][BUF_BYTES] = {"", "Away."};
 static char to[BUF_BYTES] = "";
 static char from[BUF_BYTES] = "";
+
+static struct tls tls;
+static int in_tls = 0;
 
 int
 tcp_connect(char *host, int port)
@@ -48,37 +61,69 @@ tcp_connect(char *host, int port)
 }
 
 int
-net_non_blocking(int fd)
+net_blocking(int fd, int blocking)
 {
-  return fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+  if (blocking)
+    return fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+  else 
+    return fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
 }
 
-int
-net_recv(int bytes, char *buf, void *user)
+static int
+tcp_recv(int bytes, char *buf, void *user)
 {
-  int n = recv(fd, buf, bytes, 0);
+  int n; 
+  do {
+    n = recv(fd, buf, bytes, 0);
+  } while (n < 0 && errno == EAGAIN);
+  fprintf(stderr, "tcp_recv [%d/%d]\n", n, bytes);
+  if (bytes > 0 && !n)
+    return -1;
+  return n;
+}
 
+static int
+tcp_send(int bytes, const char *buf, void *user)
+{
+  int w, n;
+  n = 0;
+  while (n < bytes) {
+    w = send(fd, buf + n, bytes - n, 0);
+    if (w < 0)
+      return -1;
+    n += w;
+  }
+  fprintf(stderr, "tcp_send [%d/%d]\n", n, bytes);
+  return n;
+}
+
+static int
+io_recv(int bytes, char *buf, void *user)
+{
+  int n;
+  n = (in_tls) ? tls_recv(bytes, buf, &tls) : tcp_recv(bytes, buf, user);
   if (n > 0 && show_log) {
-    fprintf(stderr, "\n<- [%d] ", n);
+    fprintf(stderr, "\n<- %c[%d] '", (in_tls) ? '&' : ' ', n);
     fwrite(buf, 1, n, stderr);
-    fprintf(stderr, "\n\n");
+    fprintf(stderr, "'\n\n");
   }
   return n;
 }
 
-int
-net_send(int bytes, const char *buf, void *user)
+static int
+io_send(int bytes, const char *buf, void *user)
 {
   int i;
   if (show_log)
     for (i = 0; i < bytes; i++)
       if (!isspace(buf[i])) {
-        fprintf(stderr, "\n-> [%d] ", bytes);
+        fprintf(stderr, "\n-> %c[%d] ", (in_tls) ? '&' : ' ', bytes);
         fwrite(buf, 1, bytes, stderr);
         fprintf(stderr, "\n\n");
         break;
       }
-  return send(fd, buf, bytes, 0);
+
+  return (in_tls) ? tls_send(bytes, buf, &tls) : tcp_send(bytes, buf, user);
 }
 
 static char *
@@ -93,7 +138,36 @@ static int
 auth_handler(int x, void *user)
 {
   char *p = "<presence><show/></presence>";
-  net_send(strlen(p), p, &fd);
+  io_send(strlen(p), p, &fd);
+  return 0;
+}
+
+static int
+start_tls(void *user)
+{
+  if (!in_tls) {
+    memset(&tls, 0, sizeof(tls));
+    tls.recv = tcp_recv;
+    tls.send = tcp_send;
+    fprintf(stderr, "tls starting\n");
+    /*net_blocking(fd, 1);*/
+    if (tls_start(&tls))
+      return -1;
+    /*net_blocking(fd, 0);*/
+    fprintf(stderr, "tls started\n");
+    in_tls = 1;
+  }
+  return 0;
+}
+
+static int
+stream_handler(int x, void *user)
+{
+  struct xmpp *xmpp = (struct xmpp *)user;
+  if (!in_tls && use_tls)
+    if (xmpp_starttls(xmpp))
+      return -1;
+  fprintf(stderr, "stream handler => %d\n", 0);
   return 0;
 }
 
@@ -154,7 +228,7 @@ process_server_input(int fd, struct xmpp *xmpp)
   char buf[BUF_BYTES];
   int n;
 
-  n = xmpp->io->recv(sizeof(buf), buf, xmpp->io);
+  n = io_recv(sizeof(buf), buf, &fd);
   if (n <= 0)
     return -1;
   if (xmpp_process_input(n, buf, xmpp, xmpp))
@@ -207,7 +281,7 @@ process_input(int fd, struct xmpp *xmpp)
                  xml_printf(&xmpp->mem, POOL_NIL, pres, show[status],
                             status_msg[status]));
     if (p)
-      net_send(strlen(p), p, &fd);
+      io_send(strlen(p), p, &fd);
   } else if (!strcmp(buf, ":m")) {
     s = strchr(p, ' ');
     if (s) {
@@ -216,18 +290,18 @@ process_input(int fd, struct xmpp *xmpp)
     }
     p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to, s));
     if (p)
-      net_send(strlen(p), p, &fd);
+      io_send(strlen(p), p, &fd);
   } else if (!strcmp(buf, ":r")) {
     memcpy(to, from, sizeof(to));
     if (!p)
       return 0;
     p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to, p));
     if (p)
-      net_send(strlen(p), p, &fd);
+      io_send(strlen(p), p, &fd);
   } else {
     p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to, buf));
     if (p)
-      net_send(strlen(p), p, &fd);
+      io_send(strlen(p), p, &fd);
   }
   pool_restore(&xmpp->mem, mark);
   return 0;
@@ -241,7 +315,7 @@ process_connection(int fd, struct xmpp *xmpp)
   int max_fd, ret = 0;
   int keep_alive_ms = 25000;
 
-  net_non_blocking(fd);
+  net_blocking(fd, 0);
   while (1) {
     FD_ZERO(&fds);
     FD_SET(fd, &fds);
@@ -259,8 +333,8 @@ process_connection(int fd, struct xmpp *xmpp)
       if (FD_ISSET(0, &fds))
         if (process_input(0, xmpp))
           break;
-    } else if (net_send(1, " ", &fd) < 1)
-      break;
+    } /*else if (io_send(1, " ", &fd) < 1)
+      break;*/
   }
   return 0;
 }
@@ -294,7 +368,6 @@ read_pw(const char *filename, struct xmpp *xmpp)
 int
 main(int argc, char **argv)
 {
-  struct io io = { net_send, net_recv };
   struct xmpp xmpp = { 0 };
   int i, port = XMPP_PORT, ret = 1;
   char *jid = 0, *pwdfile = 0, *srv = 0;
@@ -313,13 +386,17 @@ main(int argc, char **argv)
   if (!jid)
     die_usage();
 
-  xmpp.io = &io;
+  xmpp.send = io_send;
+  xmpp.tls_fn = start_tls;
+  xmpp.stream_fn = stream_handler;
   xmpp.node_fn = node_handler;
   xmpp.auth_fn = auth_handler;
   xmpp.use_sasl = 1;
   xmpp.jid = jid;
+#if 0
   if (srv)
     snprintf(xmpp.server, sizeof(xmpp.server), "%s", srv);
+#endif
 
   if (read_pw(pwdfile, &xmpp))
     xmpp.pwd[0] = 0;
@@ -327,7 +404,10 @@ main(int argc, char **argv)
   if (xmpp_init(&xmpp, 4096))
     return 1;
 
-  fd = tcp_connect(xmpp.server, port);
+  if (!srv)
+    srv = xmpp.server;
+
+  fd = tcp_connect(srv, port);
   if (fd < 0)
     return 1;
 
