@@ -29,7 +29,7 @@
 static int fd = -1;
 static int status = 0;
 static int use_tls = 1;
-static int show_log = 1;
+static int show_log = 0;
 static char status_msg[2][BUF_BYTES] = {"", "Away."};
 static char to[BUF_BYTES] = "";
 static char from[BUF_BYTES] = "";
@@ -76,7 +76,8 @@ tcp_recv(int bytes, char *buf, void *user)
   do {
     n = recv(fd, buf, bytes, 0);
   } while (n < 0 && errno == EAGAIN);
-  fprintf(stderr, "tcp_recv [%d/%d]\n", n, bytes);
+  if (show_log)
+    fprintf(stderr, "tcp_recv [%d/%d]\n", n, bytes);
   if (bytes > 0 && !n)
     return -1;
   return n;
@@ -93,7 +94,8 @@ tcp_send(int bytes, const char *buf, void *user)
       return -1;
     n += w;
   }
-  fprintf(stderr, "tcp_send [%d/%d]\n", n, bytes);
+  if (show_log)
+    fprintf(stderr, "tcp_send [%d/%d]\n", n, bytes);
   return n;
 }
 
@@ -149,12 +151,8 @@ start_tls(void *user)
     memset(&tls, 0, sizeof(tls));
     tls.recv = tcp_recv;
     tls.send = tcp_send;
-    fprintf(stderr, "tls starting\n");
-    /*net_blocking(fd, 1);*/
     if (tls_start(&tls))
       return -1;
-    /*net_blocking(fd, 0);*/
-    fprintf(stderr, "tls started\n");
     in_tls = 1;
   }
   return 0;
@@ -167,7 +165,6 @@ stream_handler(int x, void *user)
   if (!in_tls && use_tls)
     if (xmpp_starttls(xmpp))
       return -1;
-  fprintf(stderr, "stream handler => %d\n", 0);
   return 0;
 }
 
@@ -255,7 +252,7 @@ int
 process_input(int fd, struct xmpp *xmpp)
 {
   char buf[BUF_BYTES];
-  char *s, *p;
+  char *s, *p = 0;
   char *pres = "<presence><show>%s</show><status>%s</status></presence>";
   char *msg = "<message to='%s'><body>%s</body></message>";
   static const char *show[2] = { "online", "away" };
@@ -264,45 +261,45 @@ process_input(int fd, struct xmpp *xmpp)
   if (read_line(fd, sizeof(buf), buf))
     return -1;
 
-  p = strchr(buf, ' ');
-  if (p)
-    *p++ = 0;
   mark = pool_state(&xmpp->mem);
-  if (!strcmp(buf, ":a")) {
-    status = !status;
-    if (p) {
-      s = strchr(p, ' ');
-      if (s) {
-        s++;
-        snprintf(status_msg[status], sizeof(status_msg[status]), "%s", s);
-      }
-    }
-    p = pool_ptr(&xmpp->mem,
-                 xml_printf(&xmpp->mem, POOL_NIL, pres, show[status],
-                            status_msg[status]));
-    if (p)
-      io_send(strlen(p), p, &fd);
-  } else if (!strcmp(buf, ":m")) {
-    s = strchr(p, ' ');
-    if (s) {
-      *s++ = 0;
-      snprintf(to, sizeof(to), "%s", p);
-    }
-    p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to, s));
-    if (p)
-      io_send(strlen(p), p, &fd);
-  } else if (!strcmp(buf, ":r")) {
-    memcpy(to, from, sizeof(to));
-    if (!p)
-      return 0;
-    p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to, p));
-    if (p)
-      io_send(strlen(p), p, &fd);
-  } else {
+
+  if (buf[0] != ':')
     p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to, buf));
-    if (p)
-      io_send(strlen(p), p, &fd);
+  else {
+    switch (buf[1]) {
+    case 'a':
+      status = !status;
+      if (buf[2])
+        snprintf(status_msg[status], sizeof(status_msg[status]), "%s",
+                 buf + 3);
+      p = pool_ptr(&xmpp->mem,
+                   xml_printf(&xmpp->mem, POOL_NIL, pres, show[status],
+                              status_msg[status]));
+      break;
+
+    case 'm':
+      s = strchr(buf + 3, ' ');
+      if (!s)
+        break;
+      *s++ = 0;
+      snprintf(to, sizeof(to), "%s", buf + 3);
+      p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to, s));
+      break;
+
+    case 'r':
+      memcpy(to, from, sizeof(to));
+      if (!buf[2])
+        break;
+      p = pool_ptr(&xmpp->mem, xml_printf(&xmpp->mem, POOL_NIL, msg, to,
+                                          buf + 3));
+
+    default:
+      p = pool_ptr(&xmpp->mem,
+                   xml_printf(&xmpp->mem, POOL_NIL, msg, to, buf));
+    }
   }
+  if (p)
+    io_send(strlen(p), p, &fd);
   pool_restore(&xmpp->mem, mark);
   return 0;
 }
@@ -333,8 +330,8 @@ process_connection(int fd, struct xmpp *xmpp)
       if (FD_ISSET(0, &fds))
         if (process_input(0, xmpp))
           break;
-    } /*else if (io_send(1, " ", &fd) < 1)
-      break;*/
+    } else if ((!use_tls || in_tls) && io_send(1, " ", &fd) < 1)
+      break;
   }
   return 0;
 }
@@ -393,10 +390,6 @@ main(int argc, char **argv)
   xmpp.auth_fn = auth_handler;
   xmpp.use_sasl = 1;
   xmpp.jid = jid;
-#if 0
-  if (srv)
-    snprintf(xmpp.server, sizeof(xmpp.server), "%s", srv);
-#endif
 
   if (read_pw(pwdfile, &xmpp))
     xmpp.pwd[0] = 0;
