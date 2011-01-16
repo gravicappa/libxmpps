@@ -41,6 +41,8 @@ static int dec_number_end(int c, void *context);
 static int text_start(int c, void *context);
 static int text_body(int c, void *context);
 static int node_text_end(int c, void *context);
+static int cdata_body1(int c, void *context);
+static int cdata_body2(int c, void *context);
 
 #define RULE_WHITESPACE(s, next) \
   {s, isspace, 0, s}, \
@@ -85,24 +87,43 @@ static int node_text_end(int c, void *context);
   RULE_ATTR_VALUE(s ## _X8, s, '\'', text_start, node_attr_value_end), \
   RULE_ATTR_VALUE(s ## _X9, s, '"', text_start, node_attr_value_end)
 
+#define RULE_COMMENT(s, next) \
+  {s, fsm_char, '-', s ## _X1}, \
+  {s ## _X1, fsm_char, '-', s ## _X2}, \
+  {s ## _X1, fsm_true, 0, s ## _X1}, \
+  {s ## _X2, fsm_char, '-', s ## _X3}, \
+  {s ## _X3, fsm_char, '>', next}
+
+#define RULE_CDATA(s, next) \
+  {s, fsm_char, 'D', s ## _X1}, \
+  {s ## _X1, fsm_char, 'A', s ## _X2}, \
+  {s ## _X2, fsm_char, 'T', s ## _X3}, \
+  {s ## _X3, fsm_char, 'A', s ## _X4}, \
+  {s ## _X4, fsm_char, '[', s ## _X5}, \
+  {s ## _X5, fsm_char, ']', s ## _X6}, \
+  {s ## _X5, fsm_true, 0, s ## _X5, text_body}, \
+  {s ## _X6, fsm_char, ']', s ## _X7}, \
+  {s ## _X6, fsm_true, 0, s ## _X5, cdata_body1}, \
+  {s ## _X7, fsm_char, '>', next}, \
+  {s ## _X7, fsm_true, 0, s ## _X5, cdata_body2}
+
 struct fsm_rule xml_rules[] = {
   RULE_WHITESPACE(XML_STATE_0, XML_STATE_1),
   {XML_STATE_1, fsm_char, '<', XML_STATE_TAG},
   {XML_STATE_TAG, fsm_char, '?', XML_STATE_HEAD},
-  /*{XML_STATE_TAG, fsm_char, '!', XML_STATE_COMMENT}, */
+  /*{XML_STATE_TAG, fsm_char, '!', XML_STATE_EXCL},*/
   {XML_STATE_TAG, isspace, 0, XML_STATE_TAG_1},
   {XML_STATE_TAG, isalnum, 0, XML_STATE_NODE, fsm_reject},
   {XML_STATE_TAG_1, isspace, 0, XML_STATE_TAG_1},
   {XML_STATE_TAG_1, isalnum, 0, XML_STATE_NODE, fsm_reject},
+
+  /*{XML_STATE_EXCL, fsm_char, '-', XML_STATE_COMMENT},*/
 
   /* xml head */
   /* TODO: parse head appropriately */
   {XML_STATE_HEAD, fsm_char, '?', XML_STATE_HEAD_1},
   {XML_STATE_HEAD, fsm_true, 0, XML_STATE_HEAD},
   {XML_STATE_HEAD_1, fsm_char, '>', XML_STATE_0},
-
-  /* xml comments */
-  /* TODO: add comment states */
 
   /* xml node */
   RULE_WHITESPACE(XML_STATE_NODE, XML_STATE_NODE_1),
@@ -115,18 +136,22 @@ struct fsm_rule xml_rules[] = {
   {XML_STATE_NODE_HEAD, fsm_true, 0, XML_STATE_CONTENTS, contents_start},
 
   /* node contents */
-  {XML_STATE_CONTENTS, fsm_char, '<', XML_STATE_CONTENTS_1, node_text_end},
+  {XML_STATE_CONTENTS, fsm_char, '<', XML_STATE_CONTENTS_1},
   RULE_TEXT(XML_STATE_CONTENTS, XML_STATE_CONTENTS),
-  /*{XML_STATE_CONTENTS_1, fsm_char, '!', XML_STATE_CONTENTS_2},*/
-  {XML_STATE_CONTENTS_1, fsm_char, '/', XML_STATE_CONTENTS_3},
-  {XML_STATE_CONTENTS_1, fsm_true, 0, XML_STATE_NODE, fsm_reject},
-  /*{XML_STATE_CONTENTS_2, fsm_char, '-', XML_STATE_COMMENT},*/
-  /*{XML_STATE_CONTENTS_2, fsm_char, '[', XML_STATE_SPECIAL},*/
+  {XML_STATE_CONTENTS_1, fsm_char, '!', XML_STATE_CONTENTS_EXCL},
+  {XML_STATE_CONTENTS_1, fsm_char, '/', XML_STATE_NODE_END_1, node_text_end},
+  {XML_STATE_CONTENTS_1, fsm_true, 0, XML_STATE_NODE, node_text_end},
+  {XML_STATE_CONTENTS_EXCL, fsm_char, '-', XML_STATE_COMMENT},
+  {XML_STATE_CONTENTS_EXCL, fsm_char, '[', XML_STATE_EXCL_BR},
+  {XML_STATE_EXCL_BR, fsm_char, 'C', XML_STATE_CDATA},
+  RULE_CDATA(XML_STATE_CDATA, XML_STATE_CONTENTS),
+  RULE_COMMENT(XML_STATE_COMMENT, XML_STATE_CONTENTS),
 
   /* node end */
-  RULE_ID(XML_STATE_CONTENTS_3, XML_STATE_CONTENTS_4, node_tail_end),
-  RULE_WHITESPACE(XML_STATE_CONTENTS_4, XML_STATE_CONTENTS_5),
-  {XML_STATE_CONTENTS_5, fsm_char, '>', XML_STATE_NODE_END},
+  {XML_STATE_NODE_END_1, fsm_char, '/', XML_STATE_NODE_END_2},
+  RULE_ID(XML_STATE_NODE_END_2, XML_STATE_NODE_END_3, node_tail_end),
+  RULE_WHITESPACE(XML_STATE_NODE_END_3, XML_STATE_NODE_END_4),
+  {XML_STATE_NODE_END_4, fsm_char, '>', XML_STATE_NODE_END},
   {XML_STATE_NODE_END, fsm_true, 0, XML_STATE_CONTENTS, fsm_reject},
 
   {0}
@@ -509,5 +534,21 @@ node_text_end(int c, void *context)
   if (xml->data == POOL_NIL)
     return -1;
   xml->text = POOL_NIL;
-  return 0;
+  return 1;
+}
+
+static int
+cdata_body1(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+  xml->text = xml_printf(&xml->mem, xml->text, "]%C", c);
+  return (xml->text == POOL_NIL) ? -1 : 0;
+}
+
+static int
+cdata_body2(int c, void *context)
+{
+  struct xml *xml = (struct xml *)context;
+  xml->text = xml_printf(&xml->mem, xml->text, "]]%C", c);
+  return (xml->text == POOL_NIL) ? -1 : 0;
 }
