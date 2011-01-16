@@ -371,13 +371,9 @@ xmpp_default_node_hook(int node, struct xmpp *xmpp, void *user)
     return -1;
   if (xmpp->state == XMPP_STATE_TRY_TLS) {
     if (!strcmp(id, "proceed")) {
-      fprintf(stderr, "tls_fn\n");
-      if (xmpp->tls_fn && xmpp->tls_fn(user)) {
-        fprintf(stderr, "tls_fn => !0\n");
+      if (xmpp->tls_fn && xmpp->tls_fn(user))
         return -1;
-      }
       xmpp->state = XMPP_STATE_TLS;
-      fprintf(stderr, "tls_fn ok\n");
       return (xmpp_start(xmpp) == 0) ? 1 : -1;
     } else if (!strcmp(id, "failure"))
       return -1;
