@@ -309,7 +309,7 @@ process_input(int fd, struct xmpp *xmpp)
       xmpp_printf(xmpp, msg, to, buf + 3);
       break;
     case 'w': xmpp_printf(xmpp, x_roster); break;
-    case '<': xmpp_printf(xmpp, "%s", buf + 3); break;
+    case '<': xmpp_printf(xmpp, "%S", buf + 3); break;
     default:
       if (to[0])
         xmpp_printf(xmpp, msg, to, buf);
@@ -388,6 +388,7 @@ main(int argc, char **argv)
     case 'j': jid = argv[++i]; break;
     case 'k': pwdfile = argv[++i]; break;
     case 's': srv = argv[++i]; break;
+    case 'l': show_log = atoi(argv[++i]); break;
     case 'p':
       if (sscanf(argv[++i], "%d", &port) != 1)
         die_usage();
