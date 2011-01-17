@@ -23,13 +23,13 @@
 
 #define BUF_BYTES 512
 
-static int fd = -1;
 static int status = 0;
 static int use_tls = 1;
 static int show_log = 0;
 static char status_msg[2][BUF_BYTES] = {"", "Away."};
 static char to[BUF_BYTES] = "";
 static char from[BUF_BYTES] = "";
+static char *msg_type = "chat";
 
 static char *x_roster = "<iq type='get' id='roster'>"
                         "<query xmlns='jabber:iq:roster'/></iq>";
@@ -63,9 +63,9 @@ tcp_connect(char *host, int port)
 static int
 tcp_recv(int bytes, char *buf, void *user)
 {
-  int n; 
+  int n;
   do {
-    n = recv(fd, buf, bytes, 0);
+    n = recv(*(int *)user, buf, bytes, 0);
   } while (n < 0 && errno == EAGAIN);
   if (show_log)
     fprintf(stderr, "tcp_recv [%d/%d]\n", n, bytes);
@@ -80,7 +80,7 @@ tcp_send(int bytes, const char *buf, void *user)
   int w, n;
   n = 0;
   while (n < bytes) {
-    w = send(fd, buf + n, bytes - n, 0);
+    w = send(*(int *)user, buf + n, bytes - n, 0);
     if (w < 0)
       return -1;
     n += w;
@@ -138,8 +138,10 @@ auth_handler(int x, void *user)
 static int
 start_tls(void *user)
 {
+  struct xmpp *xmpp = (struct xmpp *)user;
   if (!in_tls) {
     memset(&tls, 0, sizeof(tls));
+    tls.user = xmpp->io_context;
     tls.recv = tcp_recv;
     tls.send = tcp_send;
     if (tls_start(&tls))
@@ -180,7 +182,8 @@ roster_handler(int x, struct xmpp *xmpp)
   char *jid, *name, *sub;
   for (d = xml_node_data(xml_node_find(x, "query", &xmpp->xml.mem),
                          &xmpp->xml.mem);
-       d; d = xml_data_next(d, &xmpp->xml.mem)) {
+       d;
+       d = xml_data_next(d, &xmpp->xml.mem)) {
     if (d->type != XML_NODE)
       continue;
     jid = xml_node_find_attr(d->value, "jid", &xmpp->xml.mem);
@@ -189,6 +192,16 @@ roster_handler(int x, struct xmpp *xmpp)
     print_msg("* %s - %s - [%s]\n", name, jid, sub);
   }
   print_msg("End of roster\n");
+  for (d = xml_node_data(xml_node_find(x, "query", &xmpp->xml.mem),
+                         &xmpp->xml.mem);
+       d;
+       d = xml_data_next(d, &xmpp->xml.mem)) {
+    if (d->type != XML_NODE)
+      continue;
+    jid = xml_node_find_attr(d->value, "jid", &xmpp->xml.mem);
+    if (jid)
+      xmpp_printf(xmpp, "<presence type='probe' to='%s'/>", jid);
+  }
 }
 
 static int
@@ -196,11 +209,11 @@ node_handler(int x, void *user)
 {
   struct xmpp *xmpp = (struct xmpp *)user;
   char *name, *msg, *msg_from, *show, *status, *type;
-  int r, n, ret = 0;
+  int r, n;
 
   r = xmpp_default_node_hook(x, xmpp, user);
   if (r < 0)
-    return 1;
+    return -1;
   if (r)
     return 0;
 
@@ -235,7 +248,7 @@ node_handler(int x, void *user)
     if (name && !strcmp(name, "roster"))
       roster_handler(x, xmpp);
   }
-  return ret;
+  return 0;
 }
 
 int
@@ -273,14 +286,17 @@ process_input(int fd, struct xmpp *xmpp)
   char buf[BUF_BYTES];
   char *s;
   char *pres = "<presence><show>%s</show><status>%s</status></presence>";
-  char *msg = "<message to='%s'><body>%s</body></message>";
+  char *epres = "<presence to='%s' type='%s'/>";
+  char *jpres = "<presence to='%s'>"
+                "<x xmlns='http://jabber.org/protocol/muc'/></presence>";
+  char *msg = "<message to='%s' type='%s'><body>%s</body></message>";
   static const char *show[2] = { "online", "away" };
 
   if (read_line(fd, sizeof(buf), buf))
     return -1;
 
   if (buf[0] != ':')
-    xmpp_printf(xmpp, msg, to, buf);
+    xmpp_printf(xmpp, msg, to, msg_type, buf);
   else {
     switch (buf[1]) {
     case 'a':
@@ -290,13 +306,17 @@ process_input(int fd, struct xmpp *xmpp)
                  buf + 3);
       xmpp_printf(xmpp, pres, show[status], status_msg[status]);
       break;
+    case 'g':
+      msg_type = "groupchat";
     case 'm':
+      if (buf[1] != 'g')
+        msg_type = "chat";
       s = strchr(buf + 3, ' ');
       if (!s)
         break;
       *s++ = 0;
       snprintf(to, sizeof(to), "%s", buf + 3);
-      xmpp_printf(xmpp, msg, to, s);
+      xmpp_printf(xmpp, msg, to, msg_type, s);
       break;
     case 'r':
       memcpy(to, from, sizeof(to));
@@ -304,11 +324,13 @@ process_input(int fd, struct xmpp *xmpp)
         break;
       xmpp_printf(xmpp, msg, to, buf + 3);
       break;
+    case 'j': xmpp_printf(xmpp, jpres, buf + 3); break;
+    case 'l': xmpp_printf(xmpp, epres, buf + 3, "unavailable"); break;
     case 'w': xmpp_printf(xmpp, x_roster); break;
     case '<': xmpp_printf(xmpp, "%S", buf + 3); break;
     default:
       if (to[0])
-        xmpp_printf(xmpp, msg, to, buf);
+        xmpp_printf(xmpp, msg, to, msg_type, buf);
     }
   }
   return 0;
@@ -351,7 +373,7 @@ die_usage(void)
 {
   fprintf(stderr, "%s",
           "sjc - simple jabber client - " SJC_VERSION "\n"
-          "(C)opyright 2010 Ramil Farkhshatov\n"
+          "(C)opyright 2010-2011 Ramil Farkhshatov\n"
           "usage: sjc [-j jid] [-s server] [-p port] [-k pwdfile]\n");
   exit(1);
 }
@@ -376,7 +398,7 @@ int
 main(int argc, char **argv)
 {
   struct xmpp xmpp = { 0 };
-  int i, port = XMPP_PORT, ret = 1;
+  int i, port = XMPP_PORT, fd, ret = 1;
   char *jid = 0, *pwdfile = 0, *srv = 0;
 
   for (i = 1; i < argc - 1 && argv[i][0] == '-'; i++)
@@ -385,15 +407,13 @@ main(int argc, char **argv)
     case 'k': pwdfile = argv[++i]; break;
     case 's': srv = argv[++i]; break;
     case 'l': show_log = atoi(argv[++i]); break;
-    case 'p':
-      if (sscanf(argv[++i], "%d", &port) != 1)
-        die_usage();
-      break;
+    case 'p': port = atoi(argv[++i]); break;
     default: die_usage();
     }
   if (!jid)
     die_usage();
 
+  xmpp.io_context = &fd;
   xmpp.send = io_send;
   xmpp.tls_fn = start_tls;
   xmpp.stream_fn = stream_handler;
@@ -402,8 +422,7 @@ main(int argc, char **argv)
   xmpp.use_sasl = 1;
   xmpp.jid = jid;
 
-  if (read_pw(pwdfile, &xmpp))
-    xmpp.pwd[0] = 0;
+  read_pw(pwdfile, &xmpp);
 
   if (xmpp_init(&xmpp, 4096))
     return 1;
