@@ -28,7 +28,7 @@ clean:V:
 
 $name.a(%.$O):N: %.$O
 
-$name.a: $LIBFILES
+$name.a: $LIBFILES $TLS_OBJ
 	ar rcu $target $prereq
 
 test_xml: test_xml.$O xml.$O fsm.$O pool.$O node.$O
@@ -37,7 +37,7 @@ test_xmpp: test_xmpp.$O $LIBFILES
 
 test_base64: test_base64.o base64.o
 
-sjc: sjc.$O tls.$O $name.a
+sjc: sjc.$O $name.a
 
 xml.$O: xml.c xml_states.h
 
@@ -45,14 +45,10 @@ xml_states.h: xml.c
   awk < $prereq '!inside && /^#define RULE/ { inside = 1; print; next; }
                  inside && /^};$/ { inside = 0; print; }
                  inside { print; }' \
-  | $CC -E - | sed 's/},/&\n/g' \
-  | awk 'BEGIN { FS="[ ,]" }
-         /^struct fsm_rule xml_rules\[\]/ { inside = 1; }
-         inside && /^};$/ { inside = 0; }
-         inside {
-           sub(/^[  ]*{/,"");
-           sub(/^[^,]*$/,"");
-           if (match($1, /^XML_STATE/) && !items[$1]) {
+  | $CC -E - \
+  | awk 'BEGIN {RS="{"; FS="[ ,]"}
+			   /^[A-Z]/ {
+           if (!items[$1]) {
              printf("#define %s %d\n", $1, nitems++);
              items[$1] = nitems;
            }
