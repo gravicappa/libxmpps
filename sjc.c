@@ -328,8 +328,8 @@ process_connection(int fd, struct xmpp *xmpp)
     FD_SET(fd, &fds);
     FD_SET(0, &fds);
     max_fd = fd;
-    tv.tv_sec = 0;
-    tv.tv_usec = keep_alive_ms * 1000;
+    tv.tv_sec = keep_alive_ms / 1000;
+    tv.tv_usec = (keep_alive_ms % 1000) * 1000;
     ret = select(max_fd + 1, &fds, 0, 0, (keep_alive_ms > 0) ? &tv : 0);
     if (ret < 0)
       break;
@@ -415,7 +415,7 @@ main(int argc, char **argv)
   if (fd < 0)
     return 1;
 
-  if (!(xmpp_start(&xmpp) != 0 || process_connection(fd, &xmpp)))
+  if (!(xmpp_start(&xmpp) || process_connection(fd, &xmpp)))
     ret = 0;
 
   xmpp_clean(&xmpp);
