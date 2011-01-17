@@ -19,8 +19,8 @@ xml_append_esc(struct pool *pool, int h, const char *str)
     case '\'': h = pool_append_str(pool, h, "&apos;"); break;
     case '"': h = pool_append_str(pool, h, "&quot;"); break;
     case '&': h = pool_append_str(pool, h, "&amp;"); break;
-    case '<': h = pool_append_str(pool, h, "&gt;"); break;
-    case '>': h = pool_append_str(pool, h, "&lt;"); break;
+    case '<': h = pool_append_str(pool, h, "&lt;"); break;
+    case '>': h = pool_append_str(pool, h, "&gt;"); break;
     default: h = pool_append_char(pool, h, *str);
     }
     if (h == POOL_NIL) {
