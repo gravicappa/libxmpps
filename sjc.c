@@ -12,19 +12,14 @@
 #include <netdb.h>
 #include <time.h>
 #include <errno.h>
-#ifdef USE_TLS
 #include <polarssl/ssl.h>
 #include <polarssl/havege.h>
-#endif/*USE_TLS*/
 
 #include "pool.h"
 #include "node.h"
 #include "xml.h"
 #include "xmpp.h"
-
-#ifdef USE_TLS
 #include "tls.h"
-#endif/*USE_TLS*/
 
 #define BUF_BYTES 512
 

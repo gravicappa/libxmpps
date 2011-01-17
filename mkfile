@@ -2,7 +2,7 @@ name = libxmpp
 TARG = $name.a
 CC = pcc
 O = o
-LIBFILES = xml.o fsm.o pool.o node.o xmpp.o md5.o base64.o
+LIBFILES = xml.o fsm.o pool.o node.o xmpp.o md5.o base64.o tls.o
 
 < config.mk
 
@@ -28,7 +28,7 @@ clean:V:
 
 $name.a(%.$O):N: %.$O
 
-$name.a: $LIBFILES $TLS_OBJ
+$name.a: $LIBFILES
 	ar rcu $target $prereq
 
 test_xml: test_xml.$O xml.$O fsm.$O pool.$O node.$O
