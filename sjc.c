@@ -225,8 +225,7 @@ node_handler(int x, void *user)
     if (!msg_from)
       return -1;
     snprintf(from, sizeof(from), "%s", msg_from);
-    msg = xml_node_text(xml_node_find(x, "body", &xmpp->xml.mem),
-                        &xmpp->xml.mem);
+    msg = xml_node_find_text(x, "body", &xmpp->xml.mem);
     if (!msg)
       return -1;
     print_msg("%.*s: %s\n", n, msg_from, msg);
@@ -234,10 +233,8 @@ node_handler(int x, void *user)
     msg_from = node_from(x, &n, xmpp);
     if (!msg_from)
       return -1;
-    show = xml_node_text(xml_node_find(x, "show", &xmpp->xml.mem),
-                         &xmpp->xml.mem);
-    status = xml_node_text(xml_node_find(x, "status", &xmpp->xml.mem),
-                           &xmpp->xml.mem);
+    show = xml_node_find_text(x, "show", &xmpp->xml.mem);
+    status = xml_node_find_text(x, "status", &xmpp->xml.mem);
     type = xml_node_find_attr(x, "type", &xmpp->xml.mem);
     if (type)
       print_msg("-!- %.*s sends %s\n", n, msg_from, type);

@@ -29,6 +29,7 @@ int xml_add_data(int x, enum xml_type type, int list, struct pool *p);
 
 char *xml_node_name(int node, struct pool *p);
 char *xml_node_text(int node, struct pool *p);
+char *xml_node_find_text(int node, const char *name, struct pool *p);
 char *xml_attr_value(int attr, struct pool *p);
 
 int xml_new(const char *name, struct pool *p);

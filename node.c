@@ -370,6 +370,12 @@ xml_node_text(int node, struct pool *p)
   return 0;
 }
 
+char *
+xml_node_find_text(int node, const char *name, struct pool *p)
+{
+  return xml_node_text(xml_node_find(node, name, p), p);
+}
+
 int
 h_from_xml_node(int h, struct pool *pool, int node, struct pool *nodepool)
 {
