@@ -26,10 +26,13 @@ tls_send(int len, const char *buf, void *user)
 }
 
 int
-tls_recv(int len, char *buf, void *user)
+tls_recv(int len, char *buf, int *remain, void *user)
 {
   struct tls *tls = (struct tls *)user;
-  return ssl_read(&tls->ssl, (unsigned char *)buf, len);
+  int n;
+  n = ssl_read(&tls->ssl, (unsigned char *)buf, len);
+  *remain = ssl_get_bytes_avail(&tls->ssl);
+  return n;
 }
 
 int

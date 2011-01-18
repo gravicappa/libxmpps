@@ -9,5 +9,5 @@ struct tls {
 
 int tls_start(struct tls *tls);
 void tls_cleanup(struct tls *tls);
-int tls_recv(int len, char *buf, void *user);
+int tls_recv(int len, char *buf, int *remain, void *user);
 int tls_send(int len, const char *buf, void *user);
