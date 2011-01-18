@@ -8,22 +8,24 @@
 
 static int dbg_show_fsm = 0;
 
-void
-test_xml()
+int
+test_xml_xmpp()
 {
   struct xml xml = { {4096}, {4096} };
   struct pool mem = { 4096 };
-  int c;
+  int c, x, err = 0;
   char *id;
 
   if (xml_init(&xml))
     exit(1);
 
-  while ((c = getc(stdin)) != EOF) {
+  while ((c = getc(stdin)) != EOF && !err) {
     if (dbg_show_fsm)
       fprintf(stderr, "s: %d c: '%c' ", xml.state, c);
-    if (xml_next_char(c, &xml))
+    if (xml_next_char(c, &xml)) {
+      err = 1;
       break;
+    }
     switch (xml.state) {
     case XML_STATE_NODE_HEAD:
       fprintf(stderr, "XML_STATE_NODE_HEAD level: %d\n", xml.level);
@@ -41,8 +43,8 @@ test_xml()
       if (xml.level == 1) {
         fprintf(stderr, "\nNODE\n%s\n\n",
                 str_from_xml_node(&mem, xml.last_node, &xml.mem));
-        id = xml_node_text(xml_node_find(xml.last_node, "body", &xml.mem),
-                           &xml.mem);
+        x = xml_node_find(xml.last_node, "body", &xml.mem);
+        id = xml_node_text(x, &xml.mem);
         fprintf(stderr, "\nMSG\n%s\n\n", id);
       }
       break;
@@ -54,6 +56,7 @@ test_xml()
   }
   xml_clean(&xml);
   pool_clean(&mem);
+  return err;
 }
 
 void
@@ -90,12 +93,11 @@ test_make_xml()
 int
 main()
 {
-  if (1)
-    test_xml();
-  if (1)
+  if (1 && test_xml_xmpp())
+    return 1;
+  if (0)
     test_printf();
-  if (1)
+  if (0)
     test_make_xml();
   return 0;
 }
-
