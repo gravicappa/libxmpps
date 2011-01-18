@@ -27,8 +27,8 @@ static int status = 0;
 static int use_tls = 1;
 static int show_log = 0;
 static char status_msg[2][BUF_BYTES] = {"", "Away."};
-static char to[BUF_BYTES] = "";
-static char from[BUF_BYTES] = "";
+static char jid_to[BUF_BYTES] = "";
+static char jid_from[BUF_BYTES] = "";
 static char *msg_type = "chat";
 
 static char *x_roster = "<iq type='get' id='roster'>"
@@ -95,11 +95,8 @@ io_recv(int bytes, char *buf, void *user)
 {
   int n;
   n = (in_tls) ? tls_recv(bytes, buf, &tls) : tcp_recv(bytes, buf, user);
-  if (n > 0 && show_log) {
-    fprintf(stderr, "\n<- %c[%d] '", (in_tls) ? '&' : ' ', n);
-    fwrite(buf, 1, n, stderr);
-    fprintf(stderr, "'\n\n");
-  }
+  if (n > 0 && show_log)
+    fprintf(stderr, "\n<-%c[%d] '%.*s'\n\n", (in_tls) ? '&' : ' ', n, n, buf);
   return n;
 }
 
@@ -110,20 +107,11 @@ io_send(int bytes, const char *buf, void *user)
   if (show_log)
     for (i = 0; i < bytes; i++)
       if (!isspace(buf[i])) {
-        fprintf(stderr, "\n-> %c[%d] ", (in_tls) ? '&' : ' ', bytes);
-        fwrite(buf, 1, bytes, stderr);
-        fprintf(stderr, "\n\n");
+        fprintf(stderr, "\n->%c[%d] %.*s\n\n", (in_tls) ? '&' : ' ', bytes,
+                bytes, buf);
         break;
       }
   return (in_tls) ? tls_send(bytes, buf, &tls) : tcp_send(bytes, buf, user);
-}
-
-static char *
-node_from(int x, int *len, struct xmpp *xmpp)
-{
-  char *from;
-  from = xml_node_find_attr(x, "from", &xmpp->xml.mem);
-  return from ? jid_partial(from, len) : 0;
 }
 
 static int
@@ -189,7 +177,7 @@ roster_handler(int x, struct xmpp *xmpp)
     jid = xml_node_find_attr(d->value, "jid", &xmpp->xml.mem);
     name = xml_node_find_attr(d->value, "name", &xmpp->xml.mem);
     sub = xml_node_find_attr(d->value, "subscription", &xmpp->xml.mem);
-    print_msg("* %s - %s - [%s]\n", name, jid, sub);
+    print_msg("* %s - %s - [%s]\n", name ? name : "", jid, sub);
   }
   print_msg("End of roster\n");
   for (d = xml_node_data(xml_node_find(x, "query", &xmpp->xml.mem),
@@ -208,7 +196,7 @@ static int
 node_handler(int x, void *user)
 {
   struct xmpp *xmpp = (struct xmpp *)user;
-  char *name, *msg, *msg_from, *show, *status, *type;
+  char *name, *msg, *from, *show, *status, *type;
   int r, n;
 
   r = xmpp_default_node_hook(x, xmpp, user);
@@ -220,25 +208,25 @@ node_handler(int x, void *user)
   name = xml_node_name(x, &xmpp->xml.mem);
   if (!name)
     return -1;
+  from = xml_node_find_attr(x, "from", &xmpp->xml.mem);
   if (!strcmp(name, "message")) {
-    msg_from = node_from(x, &n, xmpp);
-    if (!msg_from)
+    from = from ? jid_partial(from, &n) : 0;
+    if (!from)
       return -1;
-    snprintf(from, sizeof(from), "%s", msg_from);
+    snprintf(jid_from, sizeof(jid_from), "%.*s", n, from);
     msg = xml_node_find_text(x, "body", &xmpp->xml.mem);
     if (!msg)
       return -1;
-    print_msg("%.*s: %s\n", n, msg_from, msg);
+    print_msg("<%.*s> %s\n", n, from, msg);
   } else if (!strcmp(name, "presence")) {
-    msg_from = node_from(x, &n, xmpp);
-    if (!msg_from)
+    if (!from)
       return -1;
     show = xml_node_find_text(x, "show", &xmpp->xml.mem);
     status = xml_node_find_text(x, "status", &xmpp->xml.mem);
     type = xml_node_find_attr(x, "type", &xmpp->xml.mem);
     if (type)
-      print_msg("-!- %.*s sends %s\n", n, msg_from, type);
-    print_msg("-!- %.*s is %s (%s)\n", n, msg_from, show ? show : "online",
+      print_msg("-!- %s sends %s\n", from, type);
+    print_msg("-!- %s is %s (%s)\n", from, show ? show : "online",
               status ? status : "");
   } else if (!strcmp(name, "iq")) {
     name = xml_node_find_attr(x, "id", &xmpp->xml.mem);
@@ -293,7 +281,7 @@ process_input(int fd, struct xmpp *xmpp)
     return -1;
 
   if (buf[0] != ':')
-    xmpp_printf(xmpp, msg, to, msg_type, buf);
+    xmpp_printf(xmpp, msg, jid_to, msg_type, buf);
   else {
     switch (buf[1]) {
     case 'a':
@@ -312,22 +300,22 @@ process_input(int fd, struct xmpp *xmpp)
       if (!s)
         break;
       *s++ = 0;
-      snprintf(to, sizeof(to), "%s", buf + 3);
-      xmpp_printf(xmpp, msg, to, msg_type, s);
+      snprintf(jid_to, sizeof(jid_to), "%s", buf + 3);
+      xmpp_printf(xmpp, msg, jid_to, msg_type, s);
       break;
     case 'r':
-      memcpy(to, from, sizeof(to));
+      memcpy(jid_to, jid_from, sizeof(jid_to));
       if (!buf[2])
         break;
-      xmpp_printf(xmpp, msg, to, buf + 3);
+      xmpp_printf(xmpp, msg, jid_to, buf + 3);
       break;
     case 'j': xmpp_printf(xmpp, jpres, buf + 3); break;
     case 'l': xmpp_printf(xmpp, epres, buf + 3, "unavailable"); break;
     case 'w': xmpp_printf(xmpp, x_roster); break;
     case '<': xmpp_printf(xmpp, "%S", buf + 3); break;
     default:
-      if (to[0])
-        xmpp_printf(xmpp, msg, to, msg_type, buf);
+      if (jid_to[0])
+        xmpp_printf(xmpp, msg, jid_to, msg_type, buf);
     }
   }
   return 0;

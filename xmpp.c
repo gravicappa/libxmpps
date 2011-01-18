@@ -25,9 +25,6 @@ int xmpp_authorize(struct xmpp *xmpp);
 int xmpp_resource_bind(struct xmpp *xmpp);
 int xmpp_start_session(struct xmpp *xmpp);
 
-char *xmpp_trim_ws(char *src);
-int xmpp_escape_str(int dst_bytes, char *dst, const char *src);
-
 int
 xmpp_init(struct xmpp *xmpp, int stack_size)
 {
@@ -214,6 +211,35 @@ hex_from_bin(int dst_bytes, char *dst, int src_bytes, unsigned char *src)
   *dst = 0;
   return 0;
 }
+
+char *
+xmpp_trim_ws(char *src)
+{
+  char *end;
+  for (; *src && isspace(*src); src++) {}
+
+  end = src + strlen(src);
+  for (; *end && isspace(*end); end--)
+    *end = 0;
+  return src;
+}
+
+int
+xmpp_escape_str(int dst_bytes, char *dst, const char *src)
+{
+  for (; *src && dst_bytes > 1; src++, dst++, dst_bytes--) {
+    if (*src == '"' || *src == '\\') {
+      *dst++ = '\\';
+      dst_bytes--;
+      if (dst_bytes <= 1)
+        break;
+    }
+    *dst = *src;
+  }
+  *dst = 0;
+  return (dst_bytes > 1) ? 0 : -1;
+}
+
 
 static int
 sasl_md5(char md5sum[33], char *realm, char *nonce, char *cnonce,
@@ -489,34 +515,6 @@ xmpp_start_session(struct xmpp *xmpp)
 }
 
 char *
-xmpp_trim_ws(char *src)
-{
-  char *end;
-  for (; *src && isspace(*src); src++) {}
-
-  end = src + strlen(src);
-  for (; *end && isspace(*end); end--)
-    *end = 0;
-  return src;
-}
-
-int
-xmpp_escape_str(int dst_bytes, char *dst, const char *src)
-{
-  for (; *src && dst_bytes > 1; src++, dst++, dst_bytes--) {
-    if (*src == '"' || *src == '\\') {
-      *dst++ = '\\';
-      dst_bytes--;
-      if (dst_bytes <= 1)
-        break;
-    }
-    *dst = *src;
-  }
-  *dst = 0;
-  return (dst_bytes > 1) ? 0 : -1;
-}
-
-char *
 jid_name(char *jid, int *len)
 {
   int n;
@@ -572,7 +570,7 @@ xmpp_printf(struct xmpp *xmpp, const char *fmt, ...)
 
   va_start(args, fmt);
   mark = pool_state(&xmpp->mem);
-  s = pool_ptr(&xmpp->mem, xml_printfv(&xmpp->mem, POOL_NIL, fmt, args));
+  s = pool_ptr(&xmpp->mem, xml_vprintf(&xmpp->mem, POOL_NIL, fmt, args));
   if (s) {
     len = strlen(s);
     ret = (xmpp->send(strlen(s), s, xmpp->io_context) == len) ? 0 : -1;
