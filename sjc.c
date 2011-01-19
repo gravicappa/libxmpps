@@ -241,7 +241,7 @@ node_handler(int x, void *user)
 int
 process_server_input(int fd, struct xmpp *xmpp)
 {
-  char buf[8];
+  char buf[BUF_BYTES];
   int n, remain;
 
   do {
