@@ -361,7 +361,7 @@ static void
 die_usage(void)
 {
   fprintf(stderr, "%s",
-          "sjc - simple jabber client - " SJC_VERSION "\n"
+          "sjc - simple jabber client - " VERSION "\n"
           "(C)opyright 2010-2011 Ramil Farkhshatov\n"
           "usage: sjc [-j jid] [-s server] [-p port] [-k pwdfile]\n");
   exit(1);
