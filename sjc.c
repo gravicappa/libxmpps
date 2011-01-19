@@ -26,6 +26,7 @@
 static int status = 0;
 static int use_tls = 1;
 static int show_log = 0;
+static int keep_alive_ms = 50000;
 static char status_msg[2][BUF_BYTES] = {"", "Away."};
 static char jid_to[BUF_BYTES] = "";
 static char jid_from[BUF_BYTES] = "";
@@ -37,7 +38,7 @@ static char *x_roster = "<iq type='get' id='roster'>"
 static struct tls tls;
 static int in_tls = 0;
 
-int
+static int
 tcp_connect(char *host, int port)
 {
   struct sockaddr_in srv_addr;
@@ -238,7 +239,7 @@ node_handler(int x, void *user)
   return 0;
 }
 
-int
+static int
 process_server_input(int fd, struct xmpp *xmpp)
 {
   char buf[BUF_BYTES];
@@ -269,7 +270,7 @@ read_line(int fd, size_t len, char *buf)
   return 0;
 }
 
-int
+static int
 process_input(int fd, struct xmpp *xmpp)
 {
   char buf[BUF_BYTES];
@@ -325,13 +326,12 @@ process_input(int fd, struct xmpp *xmpp)
   return 0;
 }
 
-int
+static int
 process_connection(int fd, struct xmpp *xmpp)
 {
   struct timeval tv;
   fd_set fds;
   int max_fd, ret = 0;
-  int keep_alive_ms = 25000;
 
   fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
   while (1) {
@@ -426,6 +426,7 @@ main(int argc, char **argv)
   if (!(xmpp_start(&xmpp) || process_connection(fd, &xmpp)))
     ret = 0;
 
+  xmpp_printf(&xmpp, "</stream:stream>");
   xmpp_clean(&xmpp);
   close(fd);
   shutdown(fd, 2);
