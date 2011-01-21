@@ -164,7 +164,7 @@ xml_make_attr(int name, int value, int next, struct pool *p)
   int h;
   struct xml_attr *a;
 
-  if (name == POOL_NIL || value == POOL_NIL)
+  if (name == POOL_NIL)
     return POOL_NIL;
   h = pool_new(p, sizeof(struct xml_attr));
   if (h != POOL_NIL) {
@@ -179,11 +179,12 @@ xml_make_attr(int name, int value, int next, struct pool *p)
 static int
 xml_make_attr_s(const char *name, const char *value, int next, struct pool *p)
 {
-  int mark, h;
+  int mark, h, s;
 
   mark = pool_state(p);
-  h = xml_make_attr(pool_new_str(p, name), pool_new_str(p, value), next, p);
-  if (h == POOL_NIL)
+  s = pool_new_str(p, value);
+  h = xml_make_attr(pool_new_str(p, name), s, next, p);
+  if (h == POOL_NIL || !pool_ptr(p, s))
     pool_restore(p, mark);
   return h;
 }

@@ -6,7 +6,7 @@
 #include "xml.h"
 #include "xml_states.h"
 
-static int dbg_show_fsm = 0;
+static int dbg_show_fsm = 1;
 
 int
 test_xml_xmpp()
@@ -23,6 +23,7 @@ test_xml_xmpp()
     if (dbg_show_fsm)
       fprintf(stderr, "s: %d c: '%c' ", xml.state, c);
     if (xml_next_char(c, &xml)) {
+      fprintf(stderr, "ERROR c: '%c'\n", c);
       err = 1;
       break;
     }
@@ -51,8 +52,10 @@ test_xml_xmpp()
     }
     if (dbg_show_fsm)
       fprintf(stderr, "=> %d\n", xml.state);
-    if (xml.state < 0)
+    if (xml.state < 0) {
+      fprintf(stderr, "c: '%c' error\n", c);
       break;
+    }
   }
   xml_clean(&xml);
   pool_clean(&mem);

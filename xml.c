@@ -71,6 +71,7 @@ static int cdata_body2(int c, void *context);
   {s ## _X5, fsm_char, ';', s, entity_end}
 
 #define RULE_ATTR_VALUE(s, next, quote, start, end) \
+  {s, fsm_char, quote, next, end}, \
   {s, fsm_true, 0, s ## _X1, start}, \
   {s ## _X1, fsm_char, quote, next, end}, \
   RULE_TEXT(s ## _X1, next)
