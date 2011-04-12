@@ -229,8 +229,8 @@ node_handler(int x, void *user)
     type = xml_node_find_attr(x, "type", &xmpp->xml.mem);
     if (type)
       print_msg("-!- %s sends %s\n", from, type);
-    print_msg("-!- %s is %s (%s)\n", from, show ? show : "online",
-              status ? status : "");
+    print_msg("-!- %s is %s (%s)\n", from,
+              show ? show : (type ? type : "online"), status ? status : "");
   } else if (!strcmp(name, "iq")) {
     name = xml_node_find_attr(x, "id", &xmpp->xml.mem);
     if (name && !strcmp(name, "roster"))
