@@ -1,11 +1,11 @@
 #define FSM_ERROR (-1)
 
 struct fsm_rule {
-  int state;
+  int state; /* state where this rule belongs to (used in make_fsm()) */
   int (*pred)(int in);
-  int in;
-  int next;
-  int (*fn)(int in, void *context);
+  int in; /* data for special predicate fsm_char(), matches to given value */
+  int next; /* new state */
+  int (*fn)(int in, void *context); /* is called when rule matches */
 };
 
 struct fsm_state {
