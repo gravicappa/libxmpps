@@ -1,6 +1,5 @@
-name = libxmpp
+name = libxmpps
 TARG = $name.a
-CC = pcc
 O = o
 LIBFILES = xml.o fsm.o pool.o node.o xmpp.o md5.o base64.o tls.o
 
@@ -8,20 +7,7 @@ LIBFILES = xml.o fsm.o pool.o node.o xmpp.o md5.o base64.o tls.o
 
 CFLAGS = $CFLAGS -O0 -g -Wall -pedantic
 
-default:V: sjc
-
-run_xmpp_test:V: test_xmpp
-	rm -f core
-  ulimit -c 65536
-	#./test_xmpp < test/xmpp1.xml
-	./test_xmpp < test/sasl.xml
-  ulimit -c 0
-
-run_xml_test:V: test_xml
-	rm -f core
-  ulimit -c 65536
-  ./test_xml < test/in.xmpp.xml
-  ulimit -c 0
+default:V: $TARG sjc
 
 clean:V:
   rm -f *.o test_xml test_xmpp $name.a sjc
@@ -56,7 +42,13 @@ xml_states.h: xml.c
   > $target
 
 %: %.$O
-  $CC $CFLAGS -o $target $prereq $LDFLAGS 
+  $CC $CFLAGS -o $target $prereq $LDFLAGS
 
 %.$O: %.c
   $CC $CFLAGS -c $stem.c -o $target
+
+install:V: sjc $TARG
+	mkdir -p "$destdir/usr/include/libxmpps/"
+	cp *.h "$destdir/usr/include/libxmpps/"
+	cp $TARG.a "$destdir/usr/lib/"
+	cp sjc "$destdir/usr/bin/"
