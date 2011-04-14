@@ -48,7 +48,8 @@ xml_states.h: xml.c
   $CC $CFLAGS -c $stem.c -o $target
 
 install:V: sjc $TARG
-	mkdir -p "$destdir/usr/include/libxmpps/"
+	mkdir -p "$destdir/usr/include/libxmpps/" "$destdir/usr/lib/"
+	mkdir -p "$destdir/usr/bin/"
 	cp *.h "$destdir/usr/include/libxmpps/"
-	cp $TARG.a "$destdir/usr/lib/"
+	cp $TARG "$destdir/usr/lib/"
 	cp sjc "$destdir/usr/bin/"
