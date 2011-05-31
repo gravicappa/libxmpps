@@ -5,7 +5,7 @@ LIBFILES = xml.o fsm.o pool.o node.o xmpp.o md5.o base64.o tls.o
 
 < config.mk
 
-CFLAGS = $CFLAGS -O0 -g -Wall -pedantic
+CFLAGS = $CFLAGS -Os
 
 default:V: $TARG sjc
 
@@ -42,10 +42,10 @@ xml_states.h: xml.c
   > $target
 
 %: %.$O
-  $CC $CFLAGS -o $target $prereq $LDFLAGS
+  $CC $CFLAGS -DVERSION=\"$VERSION\" -o $target $prereq $LDFLAGS
 
 %.$O: %.c
-  $CC $CFLAGS -c $stem.c -o $target
+  $CC $CFLAGS -DVERSION=\"$VERSION\" -c $stem.c -o $target
 
 install:V: sjc $TARG
 	mkdir -p "$destdir/usr/include/libxmpps/" "$destdir/usr/lib/"

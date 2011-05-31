@@ -48,12 +48,11 @@ xml_append_esc(struct pool *pool, int h, const char *str)
 int
 xml_vprintf(struct pool *pool, int h, const char *fmt, va_list args)
 {
-  int mark, n;
+  int mark;
   char buf[32];
   const char *prev, *s, *arg;
 
   mark = pool_state(pool);
-  n = strlen(fmt);
   prev = fmt;
   while ((s = strchr(prev, '%'))) {
     h = pool_append_strn(pool, h, prev, s - prev);
@@ -224,7 +223,6 @@ xml_node_add_data(int node, int data, struct pool *p)
 {
   struct xml_node *n = 0;
   struct xml_data *d, *last = 0;
-  int mark;
 
   if (data == POOL_NIL)
     return -1;
@@ -232,7 +230,6 @@ xml_node_add_data(int node, int data, struct pool *p)
   for (d = xml_node_data(node, p); d; d = xml_data_next(d, p))
     last = d;
 
-  mark = pool_state(p);
   if (last)
     last->next = data;
   else {
