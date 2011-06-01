@@ -67,7 +67,7 @@ tcp_connect(char *host, int port)
   fd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
   if (fd < 0)
     return -1;
-  memcpy(&srv_addr.sin_addr, srv_host->h_addr, srv_host->h_length);
+  memcpy(&srv_addr.sin_addr, *srv_host->h_addr_list, srv_host->h_length);
   srv_addr.sin_family = AF_INET;
   srv_addr.sin_port = htons(port);
   if (connect(fd, (struct sockaddr *)&srv_addr, sizeof(srv_addr)) < 0) {
