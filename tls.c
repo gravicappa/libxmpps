@@ -21,14 +21,14 @@ along with libxmpps.  If not, see <http://www.gnu.org/licenses/>. */
 #include "tls.h"
 
 static int
-io_send(void *user, unsigned char *buf, int len)
+io_send(void *user, const unsigned char *buf, size_t len)
 {
   struct tls *tls = (struct tls *)user;
   return tls->send(len, (char *)buf, tls->user);
 }
 
 static int
-io_recv(void *user, unsigned char *buf, int len)
+io_recv(void *user, unsigned char *buf, size_t len)
 {
   struct tls *tls = (struct tls *)user;
   return tls->recv(len, (char *)buf, tls->user);
@@ -65,7 +65,7 @@ tls_start(struct tls *tls)
   ssl_set_rng(&tls->ssl, havege_rand, &tls->hs);
   ssl_set_bio(&tls->ssl, io_recv, tls, io_send, tls);
 
-  ssl_set_ciphers(&tls->ssl, ssl_default_ciphers);
+  ssl_set_ciphersuites(&tls->ssl, ssl_default_ciphersuites);
   ssl_set_session(&tls->ssl, 0, 600, &tls->ssn);
 
   if (ssl_handshake(&tls->ssl)) {
