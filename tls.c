@@ -16,9 +16,12 @@ You should have received a copy of the GNU General Public License
 along with libxmpps.  If not, see <http://www.gnu.org/licenses/>. */
 #include <string.h>
 #include <polarssl/ssl.h>
-#include <polarssl/havege.h>
+#include <polarssl/ctr_drbg.h>
+#include <polarssl/entropy.h>
 
 #include "tls.h"
+
+const char *pers = "libxmpps";
 
 static int
 io_send(void *user, const unsigned char *buf, size_t len)
@@ -54,15 +57,20 @@ tls_recv(int len, char *buf, int *remain, void *user)
 int
 tls_start(struct tls *tls)
 {
+  memset(&tls->ssn, 0, sizeof(ssl_session));
+  memset(&tls->ssl, 0, sizeof(ssl_context));
+  entropy_init(&tls->entropy);
+  if (ctr_drbg_init(&tls->ctr_drbg, entropy_func, &tls->entropy, pers,
+                    strlen(pers)))
+    return -1;
+
   if (ssl_init(&tls->ssl))
     return -1;
-  havege_init(&tls->hs);
-  memset(&tls->ssn, 0, sizeof(tls->ssn));
 
   ssl_set_endpoint(&tls->ssl, SSL_IS_CLIENT);
   ssl_set_authmode(&tls->ssl, SSL_VERIFY_NONE);
 
-  ssl_set_rng(&tls->ssl, havege_rand, &tls->hs);
+  ssl_set_rng(&tls->ssl, ctr_drbg_random, &tls->ctr_drbg);
   ssl_set_bio(&tls->ssl, io_recv, tls, io_send, tls);
 
   ssl_set_ciphersuites(&tls->ssl, ssl_default_ciphersuites);
@@ -80,4 +88,5 @@ tls_cleanup(struct tls *tls)
 {
   ssl_close_notify(&tls->ssl);
   ssl_free(&tls->ssl);
+  memset(&tls->ssl, 0, sizeof(tls->ssl));
 }

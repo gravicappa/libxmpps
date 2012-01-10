@@ -29,7 +29,8 @@ along with libxmpps.  If not, see <http://www.gnu.org/licenses/>. */
 #include <time.h>
 #include <errno.h>
 #include <polarssl/ssl.h>
-#include <polarssl/havege.h>
+#include <polarssl/ctr_drbg.h>
+#include <polarssl/entropy.h>
 
 #include "pool.h"
 #include "node.h"

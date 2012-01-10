@@ -2,7 +2,8 @@ struct tls {
   void *user;
   int (*recv)(int bytes, char *buf, void *user);
   int (*send)(int bytes, const char *buf, void *user);
-  havege_state hs;
+  ctr_drbg_context ctr_drbg;
+  entropy_context entropy;
   ssl_context ssl;
   ssl_session ssn;
 };
