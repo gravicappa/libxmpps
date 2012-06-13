@@ -14,6 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with libxmpps.  If not, see <http://www.gnu.org/licenses/>. */
+
 #include <string.h>
 #include <polarssl/ssl.h>
 #include <polarssl/ctr_drbg.h>
@@ -50,6 +51,8 @@ tls_recv(int len, char *buf, int *remain, void *user)
   struct tls *tls = (struct tls *)user;
   int n;
   n = ssl_read(&tls->ssl, (unsigned char *)buf, len);
+  if (n < 0)
+    fprintf(stderr, "err: ssl_read => -0x%x\n", -n);
   *remain = ssl_get_bytes_avail(&tls->ssl);
   return n;
 }

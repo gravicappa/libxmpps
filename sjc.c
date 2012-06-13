@@ -152,8 +152,10 @@ start_tls(void *user)
     tls.user = xmpp->io_context;
     tls.recv = tcp_recv;
     tls.send = tcp_send;
-    if (tls_start(&tls))
+    if (tls_start(&tls)) {
+      fprintf(stderr, "err: TLS start failure\n");
       return -1;
+    }
     in_tls = 1;
   }
   return 0;

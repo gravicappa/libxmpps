@@ -432,20 +432,15 @@ xmpp_default_node_hook(int node, struct xmpp *xmpp, void *user)
 int
 xmpp_auth_plain(int node, struct xmpp *xmpp)
 {
-  int h, slen, len;
-  char *s;
+  int h, buflen, len;
+  char buf[512];
 
   if (xml_node_add_attr(node, "mechanism", "PLAIN", &xmpp->mem))
     return -1;
-  h = xml_printf(&xmpp->mem, POOL_NIL, "%C%S%C%S", 0, xmpp->user, 0,
-                 xmpp->pwd);
-  s = pool_ptr(&xmpp->mem, h);
-  if (!s)
-    return -1;
-  slen = strlen(s);
-  len = base64_enclen(slen);
+  buflen = snprintf(buf, sizeof(buf), "%c%s%c%s", 0, xmpp->jid, 0, xmpp->pwd);
+  len = base64_enclen(buflen);
   h = pool_new(&xmpp->mem, len + 1);
-  if (!base64_encode(len, pool_ptr(&xmpp->mem, h), slen, s))
+  if (!base64_encode(len, pool_ptr(&xmpp->mem, h), buflen, buf))
     return -1;
   if (xml_node_add_text_id(node, h, &xmpp->mem))
     return -1;
