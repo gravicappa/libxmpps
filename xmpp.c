@@ -256,6 +256,17 @@ xmpp_escape_str(int dst_bytes, char *dst, const char *src)
   return (dst_bytes > 1) ? 0 : -1;
 }
 
+static char *
+xmpp_user(struct xmpp *xmpp)
+{
+  int jsrvlen;
+  char *jsrv;
+
+  jsrv = jid_server(xmpp->jid, &jsrvlen);
+  if (!(strncmp(jsrv, xmpp->server, jsrvlen) || xmpp->server[jsrvlen]))
+    return xmpp->jid;
+  return xmpp->user;
+}
 
 static int
 sasl_md5(char md5sum[33], char *realm, char *nonce, char *cnonce,
@@ -325,7 +336,7 @@ xmpp_make_sasl_response(char *msg, struct xmpp *xmpp)
   for (i = 0; i < SASL_CNONCE_LEN; i++)
     sprintf(cnonce + i * 8, "%08x", rand());
 
-  if (xmpp_escape_str(sizeof(user), user, xmpp->user)
+  if (xmpp_escape_str(sizeof(user), user, xmpp_user(xmpp))
       || xmpp_escape_str(sizeof(pwd), pwd, xmpp->pwd))
     return POOL_NIL;
 
@@ -433,11 +444,12 @@ int
 xmpp_auth_plain(int node, struct xmpp *xmpp)
 {
   int h, buflen, len;
-  char buf[512];
+  char buf[512], *u;
 
   if (xml_node_add_attr(node, "mechanism", "PLAIN", &xmpp->mem))
     return -1;
-  buflen = snprintf(buf, sizeof(buf), "%c%s%c%s", 0, xmpp->jid, 0, xmpp->pwd);
+  u = xmpp_user(xmpp);
+  buflen = snprintf(buf, sizeof(buf), "%c%s%c%s", 0, u, 0, xmpp->pwd);
   len = base64_enclen(buflen);
   h = pool_new(&xmpp->mem, len + 1);
   if (!base64_encode(len, pool_ptr(&xmpp->mem, h), buflen, buf))
