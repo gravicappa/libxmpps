@@ -70,7 +70,7 @@ pool_new_strn(struct pool *p, const char *str, int len)
 {
   int h;
   char *b;
-  
+
   h = pool_new(p, len + 1);
   b = pool_ptr(p, h);
   if (b) {

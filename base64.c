@@ -43,7 +43,7 @@ base64_encode(int dst_len, char *dst, int src_len, char *src)
   int n;
 
   for (n = 0;
-       src_len >= 3 && dst_len >= 4; 
+       src_len >= 3 && dst_len >= 4;
        src_len -= 3, src += 3, dst_len -= 4, dst += 4, n += 4) {
     a = src[2] | (src[1] << 8) | (src[0] << 16);
     dst[3] = table[a & 63];
@@ -87,7 +87,7 @@ base64_decode(int dst_len, char *dst, int src_len, char *src)
     b[0] = inv_table[(unsigned char)src[0]];
     b[1] = inv_table[(unsigned char)src[1]];
 
-    if (src[2] != '=') 
+    if (src[2] != '=')
       b[2] = inv_table[(unsigned char)src[2]];
     else {
       n--;

@@ -263,7 +263,7 @@ xmpp_user(struct xmpp *xmpp)
   char *jsrv;
 
   jsrv = jid_server(xmpp->jid, &jsrvlen);
-  if (!(strncmp(jsrv, xmpp->server, jsrvlen) || xmpp->server[jsrvlen]))
+  if (strncmp(jsrv, xmpp->server, jsrvlen) || xmpp->server[jsrvlen])
     return xmpp->jid;
   return xmpp->user;
 }
@@ -454,6 +454,7 @@ xmpp_auth_plain(int node, struct xmpp *xmpp)
   h = pool_new(&xmpp->mem, len + 1);
   if (!base64_encode(len, pool_ptr(&xmpp->mem, h), buflen, buf))
     return -1;
+  pool_ptr(&xmpp->mem, h)[len] = 0;
   if (xml_node_add_text_id(node, h, &xmpp->mem))
     return -1;
   return 0;
@@ -499,7 +500,7 @@ xmpp_resource_bind(struct xmpp *xmpp)
     if (x == POOL_NIL || xml_node_add_attr(x, "type", "set", &xmpp->mem))
       break;
     y = xml_insert(x, "bind", &xmpp->mem);
-    if (y == POOL_NIL 
+    if (y == POOL_NIL
         || xml_node_add_attr(y, "xmlns", xmpp_ns_bind, &xmpp->mem))
       break;
     res = jid_resource(xmpp->jid, &len);

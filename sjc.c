@@ -42,7 +42,8 @@ along with libxmpps.  If not, see <http://www.gnu.org/licenses/>. */
 
 static int status = 0;
 static int use_tls = 1;
-static int show_log = 0;
+static int use_sasl = 1;
+static int show_log = 1;
 static int keep_alive_ms = 50000;
 static char status_msg[2][BUF_BYTES] = {"", "Away."};
 static char jid_to[BUF_BYTES] = "";
@@ -427,7 +428,7 @@ main(int argc, char **argv)
   xmpp.stream_fn = stream_handler;
   xmpp.node_fn = node_handler;
   xmpp.auth_fn = auth_handler;
-  xmpp.use_sasl = 1;
+  xmpp.use_sasl = use_sasl;
   xmpp.jid = jid;
 
   read_pw(pwdfile, &xmpp);

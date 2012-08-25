@@ -57,7 +57,7 @@ make_fsm(struct fsm_rule *rules)
   }
   nstates++;
 
-  fsm = (struct fsm *)malloc(sizeof(struct fsm) 
+  fsm = (struct fsm *)malloc(sizeof(struct fsm)
                              + sizeof(struct fsm_state) * nstates);
   if (!fsm)
     return 0;
