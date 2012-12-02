@@ -5,7 +5,6 @@ struct tls {
   ctr_drbg_context ctr_drbg;
   entropy_context entropy;
   ssl_context ssl;
-  ssl_session ssn;
 };
 
 int tls_start(struct tls *tls);

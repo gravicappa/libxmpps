@@ -60,7 +60,6 @@ tls_recv(int len, char *buf, int *remain, void *user)
 int
 tls_start(struct tls *tls)
 {
-  memset(&tls->ssn, 0, sizeof(ssl_session));
   memset(&tls->ssl, 0, sizeof(ssl_context));
   entropy_init(&tls->entropy);
   if (ctr_drbg_init(&tls->ctr_drbg, entropy_func, &tls->entropy, pers,
@@ -75,9 +74,6 @@ tls_start(struct tls *tls)
 
   ssl_set_rng(&tls->ssl, ctr_drbg_random, &tls->ctr_drbg);
   ssl_set_bio(&tls->ssl, io_recv, tls, io_send, tls);
-
-  ssl_set_ciphersuites(&tls->ssl, ssl_default_ciphersuites);
-  ssl_set_session(&tls->ssl, 0, 600, &tls->ssn);
 
   if (ssl_handshake(&tls->ssl)) {
     tls_cleanup(tls);
