@@ -32,8 +32,8 @@ xml.$O: xml.c xml_states.h
 	$(CC) $(CFLAGS) -DVERSION=\"$(VERSION)\" -c $< -o $@
 
 install: sjc $(TARG)
-	mkdir -p "$destdir/usr/include/libxmpps/" "$destdir/usr/lib/"
-	mkdir -p "$destdir/usr/bin/"
-	cp *.h "$destdir/usr/include/libxmpps/"
-	cp $(TARG) "$destdir/usr/lib/"
-	cp sjc "$destdir/usr/bin/"
+	mkdir -p "$(destdir)/usr/include/libxmpps/" "$(destdir)/usr/lib/"
+	mkdir -p "$(destdir)/usr/bin/"
+	cp *.h "$(destdir)/usr/include/libxmpps/"
+	cp $(TARG) "$(destdir)/usr/lib/"
+	cp sjc "$(destdir)/usr/bin/"
