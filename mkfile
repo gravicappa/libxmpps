@@ -5,8 +5,6 @@ LIBFILES = xml.o fsm.o pool.o node.o xmpp.o md5.o base64.o tls.o
 
 < config.mk
 
-CFLAGS = $CFLAGS -Os
-
 default:V: $TARG sjc
 
 clean:V:

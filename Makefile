@@ -5,8 +5,6 @@ LIBFILES = xml.o fsm.o pool.o node.o xmpp.o md5.o base64.o tls.o
 
 include config.mk
 
-CFLAGS += -Os
-
 all: $(TARG) sjc
 
 clean:
