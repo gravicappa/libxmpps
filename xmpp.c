@@ -467,23 +467,22 @@ xmpp_authorize(struct xmpp *xmpp)
 
   ret = -1;
   mark = pool_state(&xmpp->mem);
-  do {
-    x = xml_new("auth", &xmpp->mem);
-    if (x == POOL_NIL ||
-        xml_node_add_attr(x, "xmlns", xmpp_ns_sasl, &xmpp->mem))
-      break;
-    if (xmpp->features & XMPP_SASL_MD5) {
-      if (xml_node_add_attr(x, "mechanism", "DIGEST-MD5", &xmpp->mem))
-        break;
-    } else if (xmpp->features & XMPP_SASL_PLAIN) {
-      if (xmpp_auth_plain(x, xmpp))
-        break;
-    } else
-      break;
-    if(xmpp_send_node(x, xmpp))
-      break;
-    ret = 0;
-  } while (0);
+  x = xml_new("auth", &xmpp->mem);
+  if (x == POOL_NIL
+      || xml_node_add_attr(x, "xmlns", xmpp_ns_sasl, &xmpp->mem))
+    goto end;
+  if (xmpp->features & XMPP_SASL_MD5) {
+    if (xml_node_add_attr(x, "mechanism", "DIGEST-MD5", &xmpp->mem))
+      goto end;
+  } else if (xmpp->features & XMPP_SASL_PLAIN) {
+    if (xmpp_auth_plain(x, xmpp))
+      goto end;
+  } else
+    goto end;
+  if (xmpp_send_node(x, xmpp))
+    goto end;
+  ret = 0;
+end:
   pool_restore(&xmpp->mem, mark);
   return ret;
 }
@@ -495,24 +494,23 @@ xmpp_resource_bind(struct xmpp *xmpp)
   char *res;
 
   mark = pool_state(&xmpp->mem);
-  do {
-    x = xml_new("iq", &xmpp->mem);
-    if (x == POOL_NIL || xml_node_add_attr(x, "type", "set", &xmpp->mem))
-      break;
-    y = xml_insert(x, "bind", &xmpp->mem);
-    if (y == POOL_NIL
-        || xml_node_add_attr(y, "xmlns", xmpp_ns_bind, &xmpp->mem))
-      break;
-    res = jid_resource(xmpp->jid, &len);
-    if (res && len > 0) {
-      z = xml_insert(y, "resource", &xmpp->mem);
-      if (z == POOL_NIL || xml_node_add_textn(z, len, res, &xmpp->mem))
-        break;
-    }
-    if (xmpp_send_node(x, xmpp))
-      break;
-    ret = 0;
-  } while (0);
+  x = xml_new("iq", &xmpp->mem);
+  if (x == POOL_NIL || xml_node_add_attr(x, "type", "set", &xmpp->mem))
+    goto end;
+  y = xml_insert(x, "bind", &xmpp->mem);
+  if (y == POOL_NIL
+      || xml_node_add_attr(y, "xmlns", xmpp_ns_bind, &xmpp->mem))
+    goto end;
+  res = jid_resource(xmpp->jid, &len);
+  if (res && len > 0) {
+    z = xml_insert(y, "resource", &xmpp->mem);
+    if (z == POOL_NIL || xml_node_add_textn(z, len, res, &xmpp->mem))
+      goto end;
+  }
+  if (xmpp_send_node(x, xmpp))
+    goto end;
+  ret = 0;
+end:
   pool_restore(&xmpp->mem, mark);
   return ret;
 }
@@ -522,18 +520,17 @@ xmpp_start_session(struct xmpp *xmpp)
 {
   int x, y, mark, ret = -1;
   mark = pool_state(&xmpp->mem);
-  do {
-    x = xml_new("iq", &xmpp->mem);
-    if (x == POOL_NIL || xml_node_add_attr(x, "type", "set", &xmpp->mem)
-        || xml_node_add_attr(x, "id", "auth", &xmpp->mem))
-      break;
-    y = xml_insert(x, "session", &xmpp->mem);
-    if (y == POOL_NIL
-        || xml_node_add_attr(y, "xmlns", xmpp_ns_session, &xmpp->mem)
-        || xmpp_send_node(x, xmpp))
-      break;
-    ret = 0;
-  } while (0);
+  x = xml_new("iq", &xmpp->mem);
+  if (x == POOL_NIL || xml_node_add_attr(x, "type", "set", &xmpp->mem)
+      || xml_node_add_attr(x, "id", "auth", &xmpp->mem))
+    goto end;
+  y = xml_insert(x, "session", &xmpp->mem);
+  if (y == POOL_NIL
+      || xml_node_add_attr(y, "xmlns", xmpp_ns_session, &xmpp->mem)
+      || xmpp_send_node(x, xmpp))
+    goto end;
+  ret = 0;
+end:
   pool_restore(&xmpp->mem, mark);
   return ret;
 }

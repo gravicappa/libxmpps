@@ -223,8 +223,11 @@ node_handler(int x, void *user)
   int r, n;
 
   r = xmpp_default_node_hook(x, xmpp, user);
-  if (r < 0)
+  if (r < 0) {
+    if (!xmpp->is_authorized)
+      fprintf(stderr, "Authorization error.\n");
     return -1;
+  }
   if (r)
     return 0;
 
@@ -383,7 +386,8 @@ die_usage(void)
   fprintf(stderr, "%s",
           "sjc - simple jabber client - " VERSION "\n"
           "(C)opyright 2010-2011 Ramil Farkhshatov\n"
-          "usage: sjc [-j jid] [-s server] [-p port] [-k pwdfile]\n");
+          "usage: sjc [-j jid] [-s server] [-p port] [-k pwdfile]\n"
+          "  GTalk users should specify `-s talk.google.com`\n");
   exit(1);
 }
 
